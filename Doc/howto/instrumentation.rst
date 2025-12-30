@@ -47,7 +47,9 @@ or::
 
 
 CPython must then be :option:`configured with the --with-dtrace option
-<--with-dtrace>`:
+<--with-dtrace>`.  The configuration step requires the ``dtrace``
+executable to be available on ``PATH`` (or the SystemTap shim on Linux);
+otherwise ``./configure --with-dtrace`` will stop with an error.
 
 .. code-block:: none
 
