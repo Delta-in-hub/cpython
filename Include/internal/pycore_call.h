@@ -12,6 +12,7 @@ extern "C" {
 #include "pycore_frame.h"         // _PyInterpreterFrame
 #include "pycore_global_strings.h" // _Py_ID()
 #include "pycore_pyerrors.h"      // _PyErr_Clear()
+#include "pycore_unicodeobject.h" // _PyUnicode_Ready()
 
 PyAPI_FUNC(PyObject *) _PyObject_Call_Prepend(
     PyThreadState *tstate,
@@ -58,8 +59,34 @@ _PyVectorcall_FunctionInline(PyObject *callable)
 }
 
 
+static inline const char *
+_PyDTrace_UTF8View(PyThreadState *tstate, PyObject *unicode, const char *fallback)
+{
+    if (!PyUnicode_Check(unicode)) {
+        return fallback;
+    }
+
+    if (!PyUnicode_IS_READY(unicode)) {
+        if (_PyUnicode_Ready(unicode) < 0) {
+            _PyErr_Clear(tstate);
+            return fallback;
+        }
+    }
+
+    if (PyUnicode_IS_ASCII(unicode)) {
+        return (const char *)PyUnicode_1BYTE_DATA(unicode);
+    }
+
+    const char *value = PyUnicode_AsUTF8(unicode);
+    if (value == NULL) {
+        _PyErr_Clear(tstate);
+        return fallback;
+    }
+    return value;
+}
+
 static inline void
-_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
+_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
 {
     if (!PyDTrace_CALL_ENTRY_ENABLED()) {
         return;
@@ -74,14 +101,8 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
     if (frame != NULL) {
         PyCodeObject *code = frame->f_code;
         if (code != NULL) {
-            const char *value = PyUnicode_AsUTF8(code->co_filename);
-            if (value != NULL) {
-                filename = value;
-            }
-            value = PyUnicode_AsUTF8(code->co_name);
-            if (value != NULL) {
-                funcname = value;
-            }
+            filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
+            funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
         }
 
         lineno = _PyInterpreterFrame_GetLine(frame);
@@ -89,19 +110,16 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
         PyObject *globals = frame->f_globals;
         if (globals != NULL && PyDict_CheckExact(globals)) {
             PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
-            if (modname != NULL && PyUnicode_Check(modname)) {
-                const char *value = PyUnicode_AsUTF8(modname);
-                if (value != NULL) {
-                    modulename = value;
-                }
+            if (modname != NULL) {
+                modulename = _PyDTrace_UTF8View(tstate, modname, modulename);
             }
-            else if (modname == NULL && _PyErr_Occurred(tstate)) {
+            else if (_PyErr_Occurred(tstate)) {
                 _PyErr_Clear(tstate);
             }
         }
     }
 
-    PyDTrace_CALL_ENTRY(filename, funcname, lineno, modulename);
+    PyDTrace_CALL_ENTRY(filename, funcname, lineno, modulename, callable);
 }
 
 
@@ -134,7 +152,7 @@ _PyObject_VectorcallTstate(PyThreadState *tstate, PyObject *callable,
     assert(kwnames == NULL || PyTuple_Check(kwnames));
     assert(args != NULL || PyVectorcall_NARGS(nargsf) == 0);
 
-    _PyDTrace_CALL_ENTRY_PROBE(tstate);
+    _PyDTrace_CALL_ENTRY_PROBE(tstate, callable);
 
     func = _PyVectorcall_FunctionInline(callable);
     if (func == NULL) {

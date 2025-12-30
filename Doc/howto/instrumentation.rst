@@ -208,8 +208,10 @@ probes that fire when a Python frame begins and ends execution via the
 To observe **every** callable invocation (including C-implemented functions and
 method descriptors) with a **single, global probe**, CPython now emits
 ``python`` provider ``call-entry`` events carrying the filename, function name,
-line number, and module name drawn from the currently executing frame. The
-probe fires at both runtime choke points that all calls pass through:
+line number, module name, and a raw pointer to the callable being invoked. The
+probe fires at both runtime choke points that all calls pass through while
+minimizing per-call overhead by avoiding string conversions when the Unicode
+objects are already ASCII-ready:
 
 * ``_PyObject_VectorcallTstate()`` is the lone implementation of
   ``PyObject_Vectorcall``. It is reached from bytecode-driven calls, direct
