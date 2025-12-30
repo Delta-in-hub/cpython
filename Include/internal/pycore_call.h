@@ -15,6 +15,15 @@ extern "C" {
 #include "pycore_unicodeobject.h" // _PyUnicode_Ready()
 #include "pydtrace.h"             // PyDTrace_CALL_ENTRY*
 
+// When WITH_DTRACE is not enabled or the generated probes header is absent,
+// provide no-op fallbacks so the inline helper can still compile.
+#ifndef PyDTrace_CALL_ENTRY_ENABLED
+#  define PyDTrace_CALL_ENTRY_ENABLED() (0)
+#endif
+#ifndef PyDTrace_CALL_ENTRY
+#  define PyDTrace_CALL_ENTRY(arg0, arg1, arg2) ((void)0)
+#endif
+
 PyAPI_FUNC(PyObject *) _PyObject_Call_Prepend(
     PyThreadState *tstate,
     PyObject *callable,
