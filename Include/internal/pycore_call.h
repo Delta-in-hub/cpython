@@ -31,6 +31,12 @@ extern "C" {
 #ifndef PyDTrace_CALL_ENTRY
 #  define PyDTrace_CALL_ENTRY(arg0, arg1, arg2) ((void)0)
 #endif
+#ifndef PyDTrace_CALL_RETURN_ENABLED
+#  define PyDTrace_CALL_RETURN_ENABLED() (0)
+#endif
+#ifndef PyDTrace_CALL_RETURN
+#  define PyDTrace_CALL_RETURN(arg0, arg1, arg2) ((void)0)
+#endif
 
 PyAPI_FUNC(PyObject *) _PyObject_Call_Prepend(
     PyThreadState *tstate,
@@ -151,28 +157,28 @@ _PyDTrace_IsUnknown(const char *value)
     return value != NULL && value[0] == '?' && value[1] == '\0';
 }
 
-static inline void
-_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
-{
-    if (!PyDTrace_CALL_ENTRY_ENABLED()) {
-        return;
-    }
+typedef struct {
+    const char *filename;
+    const char *funcname;
+    const char *modulename;
+} _PyDTraceCallMetadata;
 
-    const char *filename = "?";
-    const char *funcname = "?";
-    const char *modulename = "?";
+static inline _PyDTraceCallMetadata
+_PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
+{
+    _PyDTraceCallMetadata data = {"?", "?", "?"};
 
     if (PyFunction_Check(callable)) {
         PyFunctionObject *func = (PyFunctionObject *)callable;
         PyCodeObject *code = (PyCodeObject *)func->func_code;
         if (code != NULL) {
-            filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
+            data.filename = _PyDTrace_UTF8View(tstate, code->co_filename, data.filename);
             PyObject *qualname = func->func_qualname;
             if (qualname != NULL) {
-                funcname = _PyDTrace_UTF8View(tstate, qualname, funcname);
+                data.funcname = _PyDTrace_UTF8View(tstate, qualname, data.funcname);
             }
             else {
-                funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
+                data.funcname = _PyDTrace_UTF8View(tstate, code->co_name, data.funcname);
             }
         }
 
@@ -180,7 +186,7 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
         if (globals != NULL && PyDict_CheckExact(globals)) {
             PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
             if (modname != NULL) {
-                modulename = _PyDTrace_UTF8View(tstate, modname, modulename);
+                data.modulename = _PyDTrace_UTF8View(tstate, modname, data.modulename);
             }
             else if (_PyErr_Occurred(tstate)) {
                 _PyErr_Clear(tstate);
@@ -190,60 +196,60 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
     else if (PyCFunction_Check(callable)) {
         PyCFunctionObject *cfunc = (PyCFunctionObject *)callable;
         if (cfunc->m_ml != NULL && cfunc->m_ml->ml_name != NULL) {
-            funcname = cfunc->m_ml->ml_name;
+            data.funcname = cfunc->m_ml->ml_name;
         }
-        modulename = _PyDTrace_ModuleNameFromObject(tstate, cfunc->m_module, modulename);
-        filename = modulename;
+        data.modulename = _PyDTrace_ModuleNameFromObject(tstate, cfunc->m_module, data.modulename);
+        data.filename = data.modulename;
     }
     else if (PyMethodDescr_Check(callable)) {
         PyMethodDescrObject *descr = (PyMethodDescrObject *)callable;
         if (descr->d_method != NULL && descr->d_method->ml_name != NULL) {
-            funcname = descr->d_method->ml_name;
+            data.funcname = descr->d_method->ml_name;
         }
         if (descr->d_common.d_type != NULL) {
-            modulename = _PyDTrace_ModuleNameFromObject(
-                tstate, (PyObject *)descr->d_common.d_type, modulename);
-            filename = modulename;
+            data.modulename = _PyDTrace_ModuleNameFromObject(
+                tstate, (PyObject *)descr->d_common.d_type, data.modulename);
+            data.filename = data.modulename;
         }
     }
     else if (PyType_Check(callable)) {
         PyTypeObject *type = (PyTypeObject *)callable;
         if (type->tp_name != NULL) {
-            funcname = type->tp_name;
+            data.funcname = type->tp_name;
         }
-        modulename = _PyDTrace_ModuleNameFromObject(tstate, callable, modulename);
-        filename = modulename;
+        data.modulename = _PyDTrace_ModuleNameFromObject(tstate, callable, data.modulename);
+        data.filename = data.modulename;
     }
 
-    if (_PyDTrace_IsUnknown(filename) || _PyDTrace_IsUnknown(funcname)
-        || _PyDTrace_IsUnknown(modulename))
+    if (_PyDTrace_IsUnknown(data.filename) || _PyDTrace_IsUnknown(data.funcname)
+        || _PyDTrace_IsUnknown(data.modulename))
     {
         _PyCFrame *cframe = tstate->cframe;
         _PyInterpreterFrame *frame = cframe != NULL ? cframe->current_frame : NULL;
         if (frame != NULL && frame->f_code != NULL) {
-            if (_PyDTrace_IsUnknown(filename)) {
-                filename = _PyDTrace_UTF8View(tstate, frame->f_code->co_filename, filename);
+            if (_PyDTrace_IsUnknown(data.filename)) {
+                data.filename = _PyDTrace_UTF8View(tstate, frame->f_code->co_filename, data.filename);
             }
 
-            if (_PyDTrace_IsUnknown(funcname)) {
+            if (_PyDTrace_IsUnknown(data.funcname)) {
                 PyObject *func_qualname = NULL;
                 if (frame->f_func != NULL) {
                     func_qualname = frame->f_func->func_qualname;
                 }
                 if (func_qualname != NULL) {
-                    funcname = _PyDTrace_UTF8View(tstate, func_qualname, funcname);
+                    data.funcname = _PyDTrace_UTF8View(tstate, func_qualname, data.funcname);
                 }
                 else {
-                    funcname = _PyDTrace_UTF8View(tstate, frame->f_code->co_name, funcname);
+                    data.funcname = _PyDTrace_UTF8View(tstate, frame->f_code->co_name, data.funcname);
                 }
             }
 
-            if (_PyDTrace_IsUnknown(modulename)) {
+            if (_PyDTrace_IsUnknown(data.modulename)) {
                 PyObject *globals = frame->f_globals;
                 if (globals != NULL && PyDict_CheckExact(globals)) {
                     PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
                     if (modname != NULL) {
-                        modulename = _PyDTrace_UTF8View(tstate, modname, modulename);
+                        data.modulename = _PyDTrace_UTF8View(tstate, modname, data.modulename);
                     }
                     else if (_PyErr_Occurred(tstate)) {
                         _PyErr_Clear(tstate);
@@ -253,7 +259,29 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
         }
     }
 
-    PyDTrace_CALL_ENTRY(filename, funcname, modulename);
+    return data;
+}
+
+static inline void
+_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
+{
+    if (!PyDTrace_CALL_ENTRY_ENABLED()) {
+        return;
+    }
+
+    _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
+    PyDTrace_CALL_ENTRY(data.filename, data.funcname, data.modulename);
+}
+
+static inline void
+_PyDTrace_CALL_RETURN_PROBE(PyThreadState *tstate, PyObject *callable)
+{
+    if (!PyDTrace_CALL_RETURN_ENABLED()) {
+        return;
+    }
+
+    _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
+    PyDTrace_CALL_RETURN(data.filename, data.funcname, data.modulename);
 }
 
 
@@ -286,15 +314,17 @@ _PyObject_VectorcallTstate(PyThreadState *tstate, PyObject *callable,
     assert(kwnames == NULL || PyTuple_Check(kwnames));
     assert(args != NULL || PyVectorcall_NARGS(nargsf) == 0);
 
-    _PyDTrace_CALL_ENTRY_PROBE(tstate, callable);
-
     func = _PyVectorcall_FunctionInline(callable);
     if (func == NULL) {
         Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
         return _PyObject_MakeTpCall(tstate, callable, args, nargs, kwnames);
     }
+
+    _PyDTrace_CALL_ENTRY_PROBE(tstate, callable);
     res = func(callable, args, nargsf, kwnames);
-    return _Py_CheckFunctionResult(tstate, callable, res, NULL);
+    res = _Py_CheckFunctionResult(tstate, callable, res, NULL);
+    _PyDTrace_CALL_RETURN_PROBE(tstate, callable);
+    return res;
 }
 
 

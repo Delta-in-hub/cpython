@@ -223,7 +223,9 @@ _PyObject_MakeTpCall(PyThreadState *tstate, PyObject *callable,
         Py_DECREF(kwdict);
     }
 
-    return _Py_CheckFunctionResult(tstate, callable, result, NULL);
+    result = _Py_CheckFunctionResult(tstate, callable, result, NULL);
+    _PyDTrace_CALL_RETURN_PROBE(tstate, callable);
+    return result;
 }
 
 
