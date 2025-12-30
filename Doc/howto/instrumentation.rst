@@ -132,6 +132,31 @@ tracing hooks used by a SystemTap script.
 Static DTrace probes
 --------------------
 
+Global call probes
+~~~~~~~~~~~~~~~~~~
+
+Two global probes track every callable invocation that reaches the
+interpreter’s shared call sites:
+
+``call__entry(str filename, str funcname, str modulename)``
+    Fired immediately before dispatch.  Metadata is derived from the callee
+    (``__qualname__``/``__name__``, module, filename when available) with a
+    fallback to the current frame for callables that don’t expose their own
+    Python metadata.  The ``modulename`` field may be ``<frozen ...>`` for
+    frozen modules or the type name for C-defined callables.
+
+``call__return(str filename, str funcname, str modulename)``
+    Fired after the callee returns (whether it’s a Python function, C
+    function, method descriptor, or type call) on both the vectorcall fast
+    path and the legacy ``tp_call`` path, using the same metadata source order
+    as ``call__entry``.
+
+Both probes live in the ``python`` provider and cover Python functions that
+push frames as well as C-level callables that never enter the frame
+evaluator.  The existing ``function__entry``/``function__return`` probes are
+still available for frame-level tracing and can be combined with the call
+probes for deeper analysis.
+
 The following example DTrace script can be used to show the call/return
 hierarchy of a Python script, only tracing within the invocation of
 a function called "start". In other words, import-time function
