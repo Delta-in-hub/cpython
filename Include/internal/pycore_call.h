@@ -86,7 +86,7 @@ _PyDTrace_UTF8View(PyThreadState *tstate, PyObject *unicode, const char *fallbac
 }
 
 static inline void
-_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
+_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
 {
     if (!PyDTrace_CALL_ENTRY_ENABLED()) {
         return;
@@ -119,7 +119,7 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
         }
     }
 
-    PyDTrace_CALL_ENTRY(filename, funcname, lineno, modulename, callable);
+    PyDTrace_CALL_ENTRY(filename, funcname, lineno, modulename);
 }
 
 
@@ -152,7 +152,7 @@ _PyObject_VectorcallTstate(PyThreadState *tstate, PyObject *callable,
     assert(kwnames == NULL || PyTuple_Check(kwnames));
     assert(args != NULL || PyVectorcall_NARGS(nargsf) == 0);
 
-    _PyDTrace_CALL_ENTRY_PROBE(tstate, callable);
+    _PyDTrace_CALL_ENTRY_PROBE(tstate);
 
     func = _PyVectorcall_FunctionInline(callable);
     if (func == NULL) {
