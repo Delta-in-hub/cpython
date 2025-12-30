@@ -207,8 +207,8 @@ probes that fire when a Python frame begins and ends execution via the
 
 To observe **every** callable invocation (including C-implemented functions and
 method descriptors) with a **single, global probe**, CPython emits ``python``
-provider ``call-entry`` events carrying the filename, function name, line
-number, and module name. The probe fires at both runtime choke points that all
+provider ``call-entry`` events carrying the filename, function name, and module
+name. The probe fires at both runtime choke points that all
 calls pass through while minimizing per-call overhead by avoiding string
 conversions when the Unicode objects are already ASCII-ready:
 

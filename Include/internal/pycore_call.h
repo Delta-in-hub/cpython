@@ -95,7 +95,6 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
     const char *filename = "?";
     const char *funcname = "?";
     const char *modulename = "?";
-    int lineno = -1;
 
     _PyInterpreterFrame *frame = tstate->cframe ? tstate->cframe->current_frame : NULL;
     if (frame != NULL) {
@@ -104,8 +103,6 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
             filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
             funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
         }
-
-        lineno = _PyInterpreterFrame_GetLine(frame);
 
         PyObject *globals = frame->f_globals;
         if (globals != NULL && PyDict_CheckExact(globals)) {
@@ -119,7 +116,7 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
         }
     }
 
-    PyDTrace_CALL_ENTRY(filename, funcname, lineno, modulename);
+    PyDTrace_CALL_ENTRY(filename, funcname, modulename);
 }
 
 
