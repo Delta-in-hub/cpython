@@ -160,7 +160,13 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
         PyCodeObject *code = (PyCodeObject *)func->func_code;
         if (code != NULL) {
             filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
-            funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
+            PyObject *qualname = func->func_qualname;
+            if (qualname != NULL) {
+                funcname = _PyDTrace_UTF8View(tstate, qualname, funcname);
+            }
+            else {
+                funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
+            }
         }
 
         PyObject *globals = func->func_globals;

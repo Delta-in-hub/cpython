@@ -213,9 +213,11 @@ provider ``call-entry`` events carrying the filename, function name, and module
 name. The probe derives those strings directly from the callee (Python
 functions, C functions, descriptors, and type calls) and emits ``?`` when
 metadata is absent, so extension calls like ``_pickle.loads`` report the
-callable’s own names without consulting the current frame. Conversions are
-avoided when the Unicode objects are already ASCII-ready to limit per-call
-overhead:
+callable’s own names without consulting the current frame. For Python
+functions the probe prefers the qualified name (``__qualname__``) to
+disambiguate methods like ``ClassRoom.__len__`` from other ``__len__``
+definitions in the same file. Conversions are avoided when the Unicode objects
+are already ASCII-ready to limit per-call overhead:
 
 * ``_PyObject_VectorcallTstate()`` is the lone implementation of
   ``PyObject_Vectorcall``. It is reached from bytecode-driven calls, direct
