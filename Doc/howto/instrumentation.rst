@@ -210,19 +210,21 @@ probes that fire when a Python frame begins and ends execution via the
 To observe **every** callable invocation (including C-implemented functions and
 method descriptors) with a **single, global probe**, CPython emits ``python``
 provider ``call-entry`` events carrying the filename, function name, and module
-name. The probe fires at both runtime choke points that all
-calls pass through while minimizing per-call overhead by avoiding string
-conversions when the Unicode objects are already ASCII-ready:
+name. The probe first derives those strings from the target callable (Python
+functions, C functions, descriptors, and type calls) and only falls back to the
+current frame when the callable has no metadata, so extension calls like
+``_pickle.loads`` emit useful names. Conversions are avoided when the Unicode
+objects are already ASCII-ready to limit per-call overhead:
 
 * ``_PyObject_VectorcallTstate()`` is the lone implementation of
   ``PyObject_Vectorcall``. It is reached from bytecode-driven calls, direct
   C-API calls, and vectorcall-compatible types. The call-entry probe is emitted
   just before invoking the resolved ``vectorcallfunc`` so vectorcall-capable
-  objects are covered without per-opcode instrumentation.【F:Include/internal/pycore_call.h†L64-L117】【F:Include/internal/pycore_call.h†L120-L152】
+  objects are covered without per-opcode instrumentation.【F:Include/internal/pycore_call.h†L142-L240】【F:Include/internal/pycore_call.h†L244-L281】
 * ``_PyObject_MakeTpCall()`` is the fallback when a ``vectorcallfunc`` is
   absent, building temporary argument tuples/dicts before invoking ``tp_call``.
   Mirroring the same entry probe here closes the gap for legacy ``tp_call``-only
-  callables reached from either the interpreter or external C code.【F:Objects/call.c†L169-L220】【F:Objects/call.c†L312-L349】
+  callables reached from either the interpreter or external C code.【F:Objects/call.c†L169-L227】【F:Objects/call.c†L237-L260】
 
 With probes anchored at these two functions you get a uniform provider view of
 all callable executions without per-opcode or per-type instrumentation. If you

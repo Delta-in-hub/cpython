@@ -8,6 +8,8 @@ extern "C" {
 #  error "this header requires Py_BUILD_CORE define"
 #endif
 
+#include <stdbool.h>
+
 #include "pycore_pystate.h"       // _PyThreadState_GET()
 #include "pycore_frame.h"         // _PyInterpreterFrame
 #include "pycore_global_strings.h" // _Py_ID()
@@ -95,8 +97,50 @@ _PyDTrace_UTF8View(PyThreadState *tstate, PyObject *unicode, const char *fallbac
     return value;
 }
 
+static inline const char *
+_PyDTrace_ModuleNameFromObject(PyThreadState *tstate, PyObject *module, const char *fallback)
+{
+    if (module == NULL) {
+        return fallback;
+    }
+
+    if (PyUnicode_Check(module)) {
+        return _PyDTrace_UTF8View(tstate, module, fallback);
+    }
+
+    if (PyModule_Check(module)) {
+        PyObject *name = PyModule_GetNameObject(module);
+        if (name != NULL) {
+            const char *result = _PyDTrace_UTF8View(tstate, name, fallback);
+            Py_DECREF(name);
+            return result;
+        }
+        _PyErr_Clear(tstate);
+        return fallback;
+    }
+
+    PyObject *attr = PyObject_GetAttr(module, &_Py_ID(__module__));
+    if (attr != NULL) {
+        const char *result = _PyDTrace_UTF8View(tstate, attr, fallback);
+        Py_DECREF(attr);
+        return result;
+    }
+
+    _PyErr_Clear(tstate);
+
+    attr = PyObject_GetAttr(module, &_Py_ID(__name__));
+    if (attr != NULL) {
+        const char *result = _PyDTrace_UTF8View(tstate, attr, fallback);
+        Py_DECREF(attr);
+        return result;
+    }
+
+    _PyErr_Clear(tstate);
+    return fallback;
+}
+
 static inline void
-_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
+_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
 {
     if (!PyDTrace_CALL_ENTRY_ENABLED()) {
         return;
@@ -105,20 +149,87 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
     const char *filename = "?";
     const char *funcname = "?";
     const char *modulename = "?";
+    bool have_filename = false;
+    bool have_funcname = false;
+    bool have_modulename = false;
+
+    if (PyFunction_Check(callable)) {
+        PyFunctionObject *func = (PyFunctionObject *)callable;
+        PyCodeObject *code = (PyCodeObject *)func->func_code;
+        if (code != NULL) {
+            filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
+            funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
+            have_filename = true;
+            have_funcname = true;
+        }
+
+        PyObject *globals = func->func_globals;
+        if (globals != NULL && PyDict_CheckExact(globals)) {
+            PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
+            if (modname != NULL) {
+                modulename = _PyDTrace_UTF8View(tstate, modname, modulename);
+                have_modulename = true;
+            }
+            else if (_PyErr_Occurred(tstate)) {
+                _PyErr_Clear(tstate);
+            }
+        }
+    }
+    else if (PyCFunction_Check(callable)) {
+        PyCFunctionObject *cfunc = (PyCFunctionObject *)callable;
+        if (cfunc->m_ml != NULL && cfunc->m_ml->ml_name != NULL) {
+            funcname = cfunc->m_ml->ml_name;
+            have_funcname = true;
+        }
+        modulename = _PyDTrace_ModuleNameFromObject(tstate, cfunc->m_module, modulename);
+        filename = modulename;
+        have_modulename = modulename != NULL && modulename[0] != '\0' && modulename[0] != '?';
+        have_filename = have_modulename;
+    }
+    else if (PyMethodDescr_Check(callable)) {
+        PyMethodDescrObject *descr = (PyMethodDescrObject *)callable;
+        if (descr->d_method != NULL && descr->d_method->ml_name != NULL) {
+            funcname = descr->d_method->ml_name;
+            have_funcname = true;
+        }
+        if (descr->d_common.d_type != NULL) {
+            modulename = _PyDTrace_ModuleNameFromObject(
+                tstate, (PyObject *)descr->d_common.d_type, modulename);
+            filename = modulename;
+            have_modulename = modulename != NULL && modulename[0] != '\0' && modulename[0] != '?';
+            have_filename = have_modulename;
+        }
+    }
+    else if (PyType_Check(callable)) {
+        PyTypeObject *type = (PyTypeObject *)callable;
+        if (type->tp_name != NULL) {
+            funcname = type->tp_name;
+            have_funcname = true;
+        }
+        modulename = _PyDTrace_ModuleNameFromObject(tstate, callable, modulename);
+        filename = modulename;
+        have_modulename = modulename != NULL && modulename[0] != '\0' && modulename[0] != '?';
+        have_filename = have_modulename;
+    }
 
     _PyInterpreterFrame *frame = tstate->cframe ? tstate->cframe->current_frame : NULL;
     if (frame != NULL) {
         PyCodeObject *code = frame->f_code;
         if (code != NULL) {
-            filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
-            funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
+            if (!have_filename) {
+                filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
+            }
+            if (!have_funcname) {
+                funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
+            }
         }
 
         PyObject *globals = frame->f_globals;
-        if (globals != NULL && PyDict_CheckExact(globals)) {
+        if (!have_modulename && globals != NULL && PyDict_CheckExact(globals)) {
             PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
             if (modname != NULL) {
                 modulename = _PyDTrace_UTF8View(tstate, modname, modulename);
+                have_modulename = true;
             }
             else if (_PyErr_Occurred(tstate)) {
                 _PyErr_Clear(tstate);
@@ -159,7 +270,7 @@ _PyObject_VectorcallTstate(PyThreadState *tstate, PyObject *callable,
     assert(kwnames == NULL || PyTuple_Check(kwnames));
     assert(args != NULL || PyVectorcall_NARGS(nargsf) == 0);
 
-    _PyDTrace_CALL_ENTRY_PROBE(tstate);
+    _PyDTrace_CALL_ENTRY_PROBE(tstate, callable);
 
     func = _PyVectorcall_FunctionInline(callable);
     if (func == NULL) {
