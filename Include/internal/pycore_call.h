@@ -10,6 +10,7 @@ extern "C" {
 
 #include <stdbool.h>
 
+#include "pycore_frame.h"         // _PyInterpreterFrame
 #include "pycore_pystate.h"       // _PyThreadState_GET()
 #include "pycore_global_strings.h" // _Py_ID()
 #include "pycore_pyerrors.h"      // _PyErr_Clear()
@@ -206,6 +207,42 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
         }
         modulename = _PyDTrace_ModuleNameFromObject(tstate, callable, modulename);
         filename = modulename;
+    }
+
+    if (filename == "?" || funcname == "?" || modulename == "?") {
+        _PyCFrame *cframe = tstate->cframe;
+        _PyInterpreterFrame *frame = cframe != NULL ? cframe->current_frame : NULL;
+        if (frame != NULL && frame->f_code != NULL) {
+            if (filename == "?") {
+                filename = _PyDTrace_UTF8View(tstate, frame->f_code->co_filename, filename);
+            }
+
+            if (funcname == "?") {
+                PyObject *func_qualname = NULL;
+                if (frame->f_func != NULL) {
+                    func_qualname = frame->f_func->func_qualname;
+                }
+                if (func_qualname != NULL) {
+                    funcname = _PyDTrace_UTF8View(tstate, func_qualname, funcname);
+                }
+                else {
+                    funcname = _PyDTrace_UTF8View(tstate, frame->f_code->co_name, funcname);
+                }
+            }
+
+            if (modulename == "?") {
+                PyObject *globals = frame->f_globals;
+                if (globals != NULL && PyDict_CheckExact(globals)) {
+                    PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
+                    if (modname != NULL) {
+                        modulename = _PyDTrace_UTF8View(tstate, modname, modulename);
+                    }
+                    else if (_PyErr_Occurred(tstate)) {
+                        _PyErr_Clear(tstate);
+                    }
+                }
+            }
+        }
     }
 
     PyDTrace_CALL_ENTRY(filename, funcname, modulename);
