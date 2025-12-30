@@ -9,6 +9,9 @@ extern "C" {
 #endif
 
 #include "pycore_pystate.h"       // _PyThreadState_GET()
+#include "pycore_frame.h"         // _PyInterpreterFrame
+#include "pycore_global_strings.h" // _Py_ID()
+#include "pycore_pyerrors.h"      // _PyErr_Clear()
 
 PyAPI_FUNC(PyObject *) _PyObject_Call_Prepend(
     PyThreadState *tstate,
@@ -55,6 +58,53 @@ _PyVectorcall_FunctionInline(PyObject *callable)
 }
 
 
+static inline void
+_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate)
+{
+    if (!PyDTrace_CALL_ENTRY_ENABLED()) {
+        return;
+    }
+
+    const char *filename = "?";
+    const char *funcname = "?";
+    const char *modulename = "?";
+    int lineno = -1;
+
+    _PyInterpreterFrame *frame = tstate->cframe ? tstate->cframe->current_frame : NULL;
+    if (frame != NULL) {
+        PyCodeObject *code = frame->f_code;
+        if (code != NULL) {
+            const char *value = PyUnicode_AsUTF8(code->co_filename);
+            if (value != NULL) {
+                filename = value;
+            }
+            value = PyUnicode_AsUTF8(code->co_name);
+            if (value != NULL) {
+                funcname = value;
+            }
+        }
+
+        lineno = _PyInterpreterFrame_GetLine(frame);
+
+        PyObject *globals = frame->f_globals;
+        if (globals != NULL && PyDict_CheckExact(globals)) {
+            PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
+            if (modname != NULL && PyUnicode_Check(modname)) {
+                const char *value = PyUnicode_AsUTF8(modname);
+                if (value != NULL) {
+                    modulename = value;
+                }
+            }
+            else if (modname == NULL && _PyErr_Occurred(tstate)) {
+                _PyErr_Clear(tstate);
+            }
+        }
+    }
+
+    PyDTrace_CALL_ENTRY(filename, funcname, lineno, modulename);
+}
+
+
 /* Call the callable object 'callable' with the "vectorcall" calling
    convention.
 
@@ -83,6 +133,8 @@ _PyObject_VectorcallTstate(PyThreadState *tstate, PyObject *callable,
 
     assert(kwnames == NULL || PyTuple_Check(kwnames));
     assert(args != NULL || PyVectorcall_NARGS(nargsf) == 0);
+
+    _PyDTrace_CALL_ENTRY_PROBE(tstate);
 
     func = _PyVectorcall_FunctionInline(callable);
     if (func == NULL) {

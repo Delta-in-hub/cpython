@@ -197,6 +197,42 @@ The output looks like this:
     156641360747370 function-return:call_stack.py:start:28
 
 
+Extending probe coverage for all calls
+--------------------------------------
+
+The built-in ``python`` provider exposes ``function-entry`` / ``function-return``
+probes that fire when a Python frame begins and ends execution via the
+``DTRACE_FUNCTION_ENTRY`` / ``DTRACE_FUNCTION_EXIT`` hooks in
+``_PyEval_EvalFrameDefault`` (``Python/ceval.c``).【F:Python/ceval.c†L1492-L1537】【F:Python/ceval.c†L1628-L1680】
+
+To observe **every** callable invocation (including C-implemented functions and
+method descriptors) with a **single, global probe**, CPython now emits
+``python`` provider ``call-entry`` events carrying the filename, function name,
+line number, and module name drawn from the currently executing frame. The
+probe fires at both runtime choke points that all calls pass through:
+
+* ``_PyObject_VectorcallTstate()`` is the lone implementation of
+  ``PyObject_Vectorcall``. It is reached from bytecode-driven calls, direct
+  C-API calls, and vectorcall-compatible types. The call-entry probe is emitted
+  just before invoking the resolved ``vectorcallfunc`` so vectorcall-capable
+  objects are covered without per-opcode instrumentation.【F:Include/internal/pycore_call.h†L64-L117】【F:Include/internal/pycore_call.h†L120-L152】
+* ``_PyObject_MakeTpCall()`` is the fallback when a ``vectorcallfunc`` is
+  absent, building temporary argument tuples/dicts before invoking ``tp_call``.
+  Mirroring the same entry probe here closes the gap for legacy ``tp_call``-only
+  callables reached from either the interpreter or external C code.【F:Objects/call.c†L169-L220】【F:Objects/call.c†L312-L349】
+
+With probes anchored at these two functions you get a uniform provider view of
+all callable executions without per-opcode or per-type instrumentation. If you
+also want bytecode-level provenance (opcode, frame, code offset), you can add
+optional probes around the interpreter call helpers that feed into these global
+entry points, such as the ``CALL`` opcode’s shared path via
+``trace_call_function`` and the profiling-aware ``trace_call_function`` helper
+itself.【F:Python/ceval.c†L4730-L4773】【F:Python/ceval.c†L7240-L7313】 Pure Python
+functions will continue to fire the existing frame-entry/frame-exit probes, so
+the new global call-entry hook cleanly complements the established tracing
+surface.
+
+
 Static SystemTap markers
 ------------------------
 
