@@ -13,6 +13,7 @@ extern "C" {
 #include "pycore_global_strings.h" // _Py_ID()
 #include "pycore_pyerrors.h"      // _PyErr_Clear()
 #include "pycore_unicodeobject.h" // _PyUnicode_Ready()
+#include "pydtrace.h"             // PyDTrace_CALL_ENTRY*
 
 PyAPI_FUNC(PyObject *) _PyObject_Call_Prepend(
     PyThreadState *tstate,
