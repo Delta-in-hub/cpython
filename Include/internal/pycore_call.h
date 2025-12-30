@@ -11,7 +11,6 @@ extern "C" {
 #include <stdbool.h>
 
 #include "pycore_pystate.h"       // _PyThreadState_GET()
-#include "pycore_frame.h"         // _PyInterpreterFrame
 #include "pycore_global_strings.h" // _Py_ID()
 #include "pycore_pyerrors.h"      // _PyErr_Clear()
 #include "pycore_unicodeobject.h" // _PyUnicode_Ready()
@@ -155,9 +154,6 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
     const char *filename = "?";
     const char *funcname = "?";
     const char *modulename = "?";
-    bool have_filename = false;
-    bool have_funcname = false;
-    bool have_modulename = false;
 
     if (PyFunction_Check(callable)) {
         PyFunctionObject *func = (PyFunctionObject *)callable;
@@ -165,8 +161,6 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
         if (code != NULL) {
             filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
             funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
-            have_filename = true;
-            have_funcname = true;
         }
 
         PyObject *globals = func->func_globals;
@@ -174,7 +168,6 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
             PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
             if (modname != NULL) {
                 modulename = _PyDTrace_UTF8View(tstate, modname, modulename);
-                have_modulename = true;
             }
             else if (_PyErr_Occurred(tstate)) {
                 _PyErr_Clear(tstate);
@@ -185,62 +178,28 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
         PyCFunctionObject *cfunc = (PyCFunctionObject *)callable;
         if (cfunc->m_ml != NULL && cfunc->m_ml->ml_name != NULL) {
             funcname = cfunc->m_ml->ml_name;
-            have_funcname = true;
         }
         modulename = _PyDTrace_ModuleNameFromObject(tstate, cfunc->m_module, modulename);
         filename = modulename;
-        have_modulename = modulename != NULL && modulename[0] != '\0' && modulename[0] != '?';
-        have_filename = have_modulename;
     }
     else if (PyMethodDescr_Check(callable)) {
         PyMethodDescrObject *descr = (PyMethodDescrObject *)callable;
         if (descr->d_method != NULL && descr->d_method->ml_name != NULL) {
             funcname = descr->d_method->ml_name;
-            have_funcname = true;
         }
         if (descr->d_common.d_type != NULL) {
             modulename = _PyDTrace_ModuleNameFromObject(
                 tstate, (PyObject *)descr->d_common.d_type, modulename);
             filename = modulename;
-            have_modulename = modulename != NULL && modulename[0] != '\0' && modulename[0] != '?';
-            have_filename = have_modulename;
         }
     }
     else if (PyType_Check(callable)) {
         PyTypeObject *type = (PyTypeObject *)callable;
         if (type->tp_name != NULL) {
             funcname = type->tp_name;
-            have_funcname = true;
         }
         modulename = _PyDTrace_ModuleNameFromObject(tstate, callable, modulename);
         filename = modulename;
-        have_modulename = modulename != NULL && modulename[0] != '\0' && modulename[0] != '?';
-        have_filename = have_modulename;
-    }
-
-    _PyInterpreterFrame *frame = tstate->cframe ? tstate->cframe->current_frame : NULL;
-    if (frame != NULL) {
-        PyCodeObject *code = frame->f_code;
-        if (code != NULL) {
-            if (!have_filename) {
-                filename = _PyDTrace_UTF8View(tstate, code->co_filename, filename);
-            }
-            if (!have_funcname) {
-                funcname = _PyDTrace_UTF8View(tstate, code->co_name, funcname);
-            }
-        }
-
-        PyObject *globals = frame->f_globals;
-        if (!have_modulename && globals != NULL && PyDict_CheckExact(globals)) {
-            PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
-            if (modname != NULL) {
-                modulename = _PyDTrace_UTF8View(tstate, modname, modulename);
-                have_modulename = true;
-            }
-            else if (_PyErr_Occurred(tstate)) {
-                _PyErr_Clear(tstate);
-            }
-        }
     }
 
     PyDTrace_CALL_ENTRY(filename, funcname, modulename);

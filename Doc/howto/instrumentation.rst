@@ -210,11 +210,12 @@ probes that fire when a Python frame begins and ends execution via the
 To observe **every** callable invocation (including C-implemented functions and
 method descriptors) with a **single, global probe**, CPython emits ``python``
 provider ``call-entry`` events carrying the filename, function name, and module
-name. The probe first derives those strings from the target callable (Python
-functions, C functions, descriptors, and type calls) and only falls back to the
-current frame when the callable has no metadata, so extension calls like
-``_pickle.loads`` emit useful names. Conversions are avoided when the Unicode
-objects are already ASCII-ready to limit per-call overhead:
+name. The probe derives those strings directly from the callee (Python
+functions, C functions, descriptors, and type calls) and emits ``?`` when
+metadata is absent, so extension calls like ``_pickle.loads`` report the
+callable’s own names without consulting the current frame. Conversions are
+avoided when the Unicode objects are already ASCII-ready to limit per-call
+overhead:
 
 * ``_PyObject_VectorcallTstate()`` is the lone implementation of
   ``PyObject_Vectorcall``. It is reached from bytecode-driven calls, direct
