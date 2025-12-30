@@ -19,6 +19,10 @@ extern "C" {
 #include "descrobject.h"          // PyMethodDescr_Check
 #include "pydtrace.h"             // PyDTrace_CALL_ENTRY*
 
+#ifndef PyMethodDescr_Check
+#  define PyMethodDescr_Check(op) Py_IS_TYPE((op), &PyMethodDescr_Type)
+#endif
+
 // When WITH_DTRACE is not enabled or the generated probes header is absent,
 // provide no-op fallbacks so the inline helper can still compile.
 #ifndef PyDTrace_CALL_ENTRY_ENABLED
