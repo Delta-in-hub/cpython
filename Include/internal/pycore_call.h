@@ -145,6 +145,12 @@ _PyDTrace_ModuleNameFromObject(PyThreadState *tstate, PyObject *module, const ch
     return fallback;
 }
 
+static inline bool
+_PyDTrace_IsUnknown(const char *value)
+{
+    return value != NULL && value[0] == '?' && value[1] == '\0';
+}
+
 static inline void
 _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
 {
@@ -209,15 +215,17 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
         filename = modulename;
     }
 
-    if (filename == "?" || funcname == "?" || modulename == "?") {
+    if (_PyDTrace_IsUnknown(filename) || _PyDTrace_IsUnknown(funcname)
+        || _PyDTrace_IsUnknown(modulename))
+    {
         _PyCFrame *cframe = tstate->cframe;
         _PyInterpreterFrame *frame = cframe != NULL ? cframe->current_frame : NULL;
         if (frame != NULL && frame->f_code != NULL) {
-            if (filename == "?") {
+            if (_PyDTrace_IsUnknown(filename)) {
                 filename = _PyDTrace_UTF8View(tstate, frame->f_code->co_filename, filename);
             }
 
-            if (funcname == "?") {
+            if (_PyDTrace_IsUnknown(funcname)) {
                 PyObject *func_qualname = NULL;
                 if (frame->f_func != NULL) {
                     func_qualname = frame->f_func->func_qualname;
@@ -230,7 +238,7 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
                 }
             }
 
-            if (modulename == "?") {
+            if (_PyDTrace_IsUnknown(modulename)) {
                 PyObject *globals = frame->f_globals;
                 if (globals != NULL && PyDict_CheckExact(globals)) {
                     PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
