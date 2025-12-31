@@ -117,12 +117,12 @@ Sufficiently modern readelf can print the metadata::
             Provider: python
             Name: function__entry
             Location: 0x000000000053db6c, Base: 0x0000000000630ce2, Semaphore: 0x00000000008d6be8
-            Arguments: 8@%rbp 8@%r12 -4@%eax
+            Arguments: 8@%rbp 8@%r12 8@%rbx
         stapsdt              0x00000046          NT_STAPSDT (SystemTap probe descriptors)
             Provider: python
             Name: function__return
             Location: 0x000000000053dba8, Base: 0x0000000000630ce2, Semaphore: 0x00000000008d6bea
-            Arguments: 8@%rbp 8@%r12 -4@%eax
+            Arguments: 8@%rbp 8@%r12 8@%rbx
 
 The above metadata contains information for SystemTap describing how it
 can patch strategically placed machine code instructions to enable the
@@ -132,30 +132,32 @@ tracing hooks used by a SystemTap script.
 Static DTrace probes
 --------------------
 
-Global call probes
-~~~~~~~~~~~~~~~~~~
+Function probes
+~~~~~~~~~~~~~~~
 
-Two global probes track every callable invocation that reaches the
-interpreter’s shared call sites:
+The ``function__entry`` and ``function__return`` probes track callable
+invocations that reach the interpreter’s shared call sites. They also fire
+when the frame evaluator enters and exits Python bytecode, so bytecode
+functions and C-level callables are visible through the same interface.
 
-``call__entry(str filename, str funcname, str modulename)``
-    Fired immediately before dispatch.  Metadata is derived from the callee
-    (``__qualname__``/``__name__``, module, filename when available) with a
-    fallback to the current frame for callables that don’t expose their own
-    Python metadata.  The ``modulename`` field may be ``<frozen ...>`` for
-    frozen modules or the type name for C-defined callables.
+``function__entry(str filename, str funcname, str modulename)``
+    Fired immediately before dispatch and when execution of a Python function
+    begins.  Metadata is derived from the callee (``__qualname__``/``__name__``,
+    module, filename when available) with a fallback to the current frame for
+    callables that don’t expose their own Python metadata.  The ``modulename``
+    field may be ``<frozen ...>`` for frozen modules or the type name for
+    C-defined callables.
 
-``call__return(str filename, str funcname, str modulename)``
-    Fired after the callee returns (whether it’s a Python function, C
+``function__return(str filename, str funcname, str modulename)``
+    Fired after the callable returns (whether it’s a Python function, C
     function, method descriptor, or type call) on both the vectorcall fast
     path and the legacy ``tp_call`` path, using the same metadata source order
-    as ``call__entry``.
+    as ``function__entry``.
 
 Both probes live in the ``python`` provider and cover Python functions that
 push frames as well as C-level callables that never enter the frame
-evaluator.  The existing ``function__entry``/``function__return`` probes are
-still available for frame-level tracing and can be combined with the call
-probes for deeper analysis.
+evaluator. A whitelist skips common import-time modules to keep probe noise
+manageable when the interface is enabled.
 
 The following example DTrace script can be used to show the call/return
 hierarchy of a Python script, only tracing within the invocation of
@@ -177,7 +179,7 @@ invocations are not going to be listed:
     {
             printf("%d\t%*s:", timestamp, 15, probename);
             printf("%*s", self->indent, "");
-            printf("%s:%s:%d\n", basename(copyinstr(arg0)), copyinstr(arg1), arg2);
+            printf("%s:%s:%s\n", basename(copyinstr(arg0)), copyinstr(arg1), copyinstr(arg2));
             self->indent++;
     }
 
@@ -187,7 +189,7 @@ invocations are not going to be listed:
             self->indent--;
             printf("%d\t%*s:", timestamp, 15, probename);
             printf("%*s", self->indent, "");
-            printf("%s:%s:%d\n", basename(copyinstr(arg0)), copyinstr(arg1), arg2);
+            printf("%s:%s:%s\n", basename(copyinstr(arg0)), copyinstr(arg1), copyinstr(arg2));
     }
 
     python$target:::function-return
@@ -284,19 +286,19 @@ hierarchy of a Python script:
    probe process("python").mark("function__entry") {
         filename = user_string($arg1);
         funcname = user_string($arg2);
-        lineno = $arg3;
+        modulename = user_string($arg3);
 
-        printf("%s => %s in %s:%d\\n",
-               thread_indent(1), funcname, filename, lineno);
+        printf("%s => %s in %s [%s]\\n",
+               thread_indent(1), funcname, filename, modulename);
    }
 
    probe process("python").mark("function__return") {
        filename = user_string($arg1);
        funcname = user_string($arg2);
-       lineno = $arg3;
+       modulename = user_string($arg3);
 
-       printf("%s <= %s in %s:%d\\n",
-              thread_indent(-1), funcname, filename, lineno);
+       printf("%s <= %s in %s [%s]\\n",
+              thread_indent(-1), funcname, filename, modulename);
    }
 
 It can be invoked like this::
@@ -344,37 +346,12 @@ should instead read:
 Available static markers
 ------------------------
 
-.. object:: function__entry(str filename, str funcname, int lineno)
+.. object:: function__entry(str filename, str funcname, str modulename)
 
-   This marker indicates that execution of a Python function has begun.
-   It is only triggered for pure-Python (bytecode) functions.
-
-   The filename, function name, and line number are provided back to the
-   tracing script as positional arguments, which must be accessed using
-   ``$arg1``, ``$arg2``, ``$arg3``:
-
-       * ``$arg1`` : ``(const char *)`` filename, accessible using ``user_string($arg1)``
-
-       * ``$arg2`` : ``(const char *)`` function name, accessible using
-         ``user_string($arg2)``
-
-       * ``$arg3`` : ``int`` line number
-
-.. object:: function__return(str filename, str funcname, int lineno)
-
-   This marker is the converse of :c:func:`!function__entry`, and indicates that
-   execution of a Python function has ended (either via ``return``, or via an
-   exception).  It is only triggered for pure-Python (bytecode) functions.
-
-   The arguments are the same as for :c:func:`!function__entry`
-
-.. object:: call__entry(str filename, str funcname, str modulename)
-
-   This marker fires immediately before a callable is dispatched at the
-   interpreter's shared call sites.  It covers all callables that reach these
-   choke points, including Python functions, C functions, method descriptors,
-   and type calls.  For Python functions it prefers the qualified name
-   (``__qualname__``) to disambiguate methods.
+   This marker indicates that execution of a Python function has begun, and it
+   also fires immediately before a callable is dispatched at the interpreter's
+   shared call sites. It therefore covers both pure-Python (bytecode)
+   functions and C-level callables that never enter the frame evaluator.
 
    The filename, function name, and module name are provided back to the
    tracing script as positional arguments, which must be accessed using
@@ -387,10 +364,13 @@ Available static markers
 
        * ``$arg3`` : ``(const char *)`` module name, accessible using ``user_string($arg3)``
 
-.. object:: call__return(str filename, str funcname, str modulename)
+.. object:: function__return(str filename, str funcname, str modulename)
 
-   This marker fires after the callable returns (whether successfully or via an
-   exception).  The arguments are the same as for :c:func:`!call__entry`.
+   This marker is the converse of :c:func:`!function__entry`, and indicates that
+   execution of a Python callable has ended (either via ``return``, or via an
+   exception).
+
+   The arguments are the same as for :c:func:`!function__entry`
 
 .. object:: line(str filename, str funcname, int lineno)
 
@@ -454,14 +434,14 @@ Here is a tapset file, based on a non-shared build of CPython:
     {
         filename = user_string($arg1);
         funcname = user_string($arg2);
-        lineno = $arg3;
+        modulename = user_string($arg3);
         frameptr = $arg4
     }
     probe python.function.return = process("python").mark("function__return")
     {
         filename = user_string($arg1);
         funcname = user_string($arg2);
-        lineno = $arg3;
+        modulename = user_string($arg3);
         frameptr = $arg4
     }
 
@@ -469,12 +449,12 @@ If this file is installed in SystemTap's tapset directory (e.g.
 ``/usr/share/systemtap/tapset``), then these additional probepoints become
 available:
 
-.. object:: python.function.entry(str filename, str funcname, int lineno, frameptr)
+.. object:: python.function.entry(str filename, str funcname, str modulename, frameptr)
 
    This probe point indicates that execution of a Python function has begun.
    It is only triggered for pure-Python (bytecode) functions.
 
-.. object:: python.function.return(str filename, str funcname, int lineno, frameptr)
+.. object:: python.function.return(str filename, str funcname, str modulename, frameptr)
 
    This probe point is the converse of ``python.function.return``, and
    indicates that execution of a Python function has ended (either via

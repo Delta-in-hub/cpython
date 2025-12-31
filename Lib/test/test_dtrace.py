@@ -236,8 +236,6 @@ class CheckDtraceProbes(unittest.TestCase):
             "Name: gc__done",
             "Name: function__entry",
             "Name: function__return",
-            "Name: call__entry",
-            "Name: call__return",
             "Name: line",
         ]
 
