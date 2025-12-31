@@ -8,7 +8,22 @@ extern "C" {
 #  error "this header requires Py_BUILD_CORE define"
 #endif
 
+#include <stdbool.h>
+
+#include "pycore_frame.h"         // _PyInterpreterFrame
 #include "pycore_pystate.h"       // _PyThreadState_GET()
+#include "pycore_global_strings.h" // _Py_ID()
+#include "pycore_pyerrors.h"      // _PyErr_Clear()
+#include "pycore_unicodeobject.h" // _PyUnicode_Ready()
+#include "methodobject.h"         // PyCFunctionObject
+#include "descrobject.h"          // PyMethodDescr_Check
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+#  include "pydtrace.h"             // PyDTrace_CALL_ENTRY*
+#endif
+
+#ifndef PyMethodDescr_Check
+#  define PyMethodDescr_Check(op) Py_IS_TYPE((op), &PyMethodDescr_Type)
+#endif
 
 PyAPI_FUNC(PyObject *) _PyObject_Call_Prepend(
     PyThreadState *tstate,
@@ -55,6 +70,224 @@ _PyVectorcall_FunctionInline(PyObject *callable)
 }
 
 
+static inline const char *
+_PyDTrace_UTF8View(PyThreadState *tstate, PyObject *unicode, const char *fallback)
+{
+    if (!PyUnicode_Check(unicode)) {
+        return fallback;
+    }
+
+    if (!PyUnicode_IS_READY(unicode)) {
+        if (_PyUnicode_Ready(unicode) < 0) {
+            _PyErr_Clear(tstate);
+            return fallback;
+        }
+    }
+
+    if (PyUnicode_IS_ASCII(unicode)) {
+        return (const char *)PyUnicode_1BYTE_DATA(unicode);
+    }
+
+    const char *value = PyUnicode_AsUTF8(unicode);
+    if (value == NULL) {
+        _PyErr_Clear(tstate);
+        return fallback;
+    }
+    return value;
+}
+
+static inline const char *
+_PyDTrace_ModuleNameFromObject(PyThreadState *tstate, PyObject *module, const char *fallback)
+{
+    if (module == NULL) {
+        return fallback;
+    }
+
+    if (PyUnicode_Check(module)) {
+        return _PyDTrace_UTF8View(tstate, module, fallback);
+    }
+
+    if (PyModule_Check(module)) {
+        PyObject *name = PyModule_GetNameObject(module);
+        if (name != NULL) {
+            const char *result = _PyDTrace_UTF8View(tstate, name, fallback);
+            Py_DECREF(name);
+            return result;
+        }
+        _PyErr_Clear(tstate);
+        return fallback;
+    }
+
+    PyObject *attr = PyObject_GetAttrString(module, "__module__");
+    if (attr != NULL) {
+        const char *result = _PyDTrace_UTF8View(tstate, attr, fallback);
+        Py_DECREF(attr);
+        return result;
+    }
+    _PyErr_Clear(tstate);
+
+    attr = PyObject_GetAttrString(module, "__name__");
+    if (attr != NULL) {
+        const char *result = _PyDTrace_UTF8View(tstate, attr, fallback);
+        Py_DECREF(attr);
+        return result;
+    }
+    _PyErr_Clear(tstate);
+
+    return fallback;
+}
+
+static inline bool
+_PyDTrace_IsUnknown(const char *value)
+{
+    return value != NULL && value[0] == '?' && value[1] == '\0';
+}
+
+typedef struct {
+    const char *filename;
+    const char *funcname;
+    const char *modulename;
+} _PyDTraceCallMetadata;
+
+static inline _PyDTraceCallMetadata
+_PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
+{
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+    _PyDTraceCallMetadata data = {"?", "?", "?"};
+
+    if (PyFunction_Check(callable)) {
+        PyFunctionObject *func = (PyFunctionObject *)callable;
+        PyCodeObject *code = (PyCodeObject *)func->func_code;
+        if (code != NULL) {
+            data.filename = _PyDTrace_UTF8View(tstate, code->co_filename, data.filename);
+            PyObject *qualname = func->func_qualname;
+            if (qualname != NULL) {
+                data.funcname = _PyDTrace_UTF8View(tstate, qualname, data.funcname);
+            }
+            else {
+                data.funcname = _PyDTrace_UTF8View(tstate, code->co_name, data.funcname);
+            }
+        }
+
+        PyObject *globals = func->func_globals;
+        if (globals != NULL && PyDict_CheckExact(globals)) {
+            PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
+            if (modname != NULL) {
+                data.modulename = _PyDTrace_UTF8View(tstate, modname, data.modulename);
+            }
+            else if (_PyErr_Occurred(tstate)) {
+                _PyErr_Clear(tstate);
+            }
+        }
+    }
+    else if (PyCFunction_Check(callable)) {
+        PyCFunctionObject *cfunc = (PyCFunctionObject *)callable;
+        if (cfunc->m_ml != NULL && cfunc->m_ml->ml_name != NULL) {
+            data.funcname = cfunc->m_ml->ml_name;
+        }
+        data.modulename = _PyDTrace_ModuleNameFromObject(tstate, cfunc->m_module, data.modulename);
+        data.filename = data.modulename;
+    }
+    else if (PyMethodDescr_Check(callable)) {
+        PyMethodDescrObject *descr = (PyMethodDescrObject *)callable;
+        if (descr->d_method != NULL && descr->d_method->ml_name != NULL) {
+            data.funcname = descr->d_method->ml_name;
+        }
+        if (descr->d_common.d_type != NULL) {
+            data.modulename = _PyDTrace_ModuleNameFromObject(
+                tstate, (PyObject *)descr->d_common.d_type, data.modulename);
+            data.filename = data.modulename;
+        }
+    }
+    else if (PyType_Check(callable)) {
+        PyTypeObject *type = (PyTypeObject *)callable;
+        if (type->tp_name != NULL) {
+            data.funcname = type->tp_name;
+        }
+        data.modulename = _PyDTrace_ModuleNameFromObject(tstate, callable, data.modulename);
+        data.filename = data.modulename;
+    }
+
+    if (_PyDTrace_IsUnknown(data.filename) || _PyDTrace_IsUnknown(data.funcname)
+        || _PyDTrace_IsUnknown(data.modulename))
+    {
+        _PyCFrame *cframe = tstate->cframe;
+        _PyInterpreterFrame *frame = cframe != NULL ? cframe->current_frame : NULL;
+        if (frame != NULL && frame->f_code != NULL) {
+            if (_PyDTrace_IsUnknown(data.filename)) {
+                data.filename = _PyDTrace_UTF8View(tstate, frame->f_code->co_filename, data.filename);
+            }
+
+            if (_PyDTrace_IsUnknown(data.funcname)) {
+                PyObject *func_qualname = NULL;
+                if (frame->f_func != NULL) {
+                    func_qualname = frame->f_func->func_qualname;
+                }
+                if (func_qualname != NULL) {
+                    data.funcname = _PyDTrace_UTF8View(tstate, func_qualname, data.funcname);
+                }
+                else {
+                    data.funcname = _PyDTrace_UTF8View(tstate, frame->f_code->co_name, data.funcname);
+                }
+            }
+
+            if (_PyDTrace_IsUnknown(data.modulename)) {
+                PyObject *globals = frame->f_globals;
+                if (globals != NULL && PyDict_CheckExact(globals)) {
+                    PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
+                    if (modname != NULL) {
+                        data.modulename = _PyDTrace_UTF8View(tstate, modname, data.modulename);
+                    }
+                    else if (_PyErr_Occurred(tstate)) {
+                        _PyErr_Clear(tstate);
+                    }
+                }
+            }
+        }
+    }
+
+    return data;
+#else
+    _PyDTraceCallMetadata data = {"?", "?", "?"};
+    (void)tstate;
+    (void)callable;
+    return data;
+#endif
+}
+
+static inline void
+_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
+{
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+    if (!PyDTrace_CALL_ENTRY_ENABLED()) {
+        return;
+    }
+
+    _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
+    PyDTrace_CALL_ENTRY(data.filename, data.funcname, data.modulename);
+#else
+    (void)tstate;
+    (void)callable;
+#endif
+}
+
+static inline void
+_PyDTrace_CALL_RETURN_PROBE(PyThreadState *tstate, PyObject *callable)
+{
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+    if (!PyDTrace_CALL_RETURN_ENABLED()) {
+        return;
+    }
+
+    _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
+    PyDTrace_CALL_RETURN(data.filename, data.funcname, data.modulename);
+#else
+    (void)tstate;
+    (void)callable;
+#endif
+}
+
+
 /* Call the callable object 'callable' with the "vectorcall" calling
    convention.
 
@@ -89,8 +322,12 @@ _PyObject_VectorcallTstate(PyThreadState *tstate, PyObject *callable,
         Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
         return _PyObject_MakeTpCall(tstate, callable, args, nargs, kwnames);
     }
+
+    _PyDTrace_CALL_ENTRY_PROBE(tstate, callable);
     res = func(callable, args, nargsf, kwnames);
-    return _Py_CheckFunctionResult(tstate, callable, res, NULL);
+    res = _Py_CheckFunctionResult(tstate, callable, res, NULL);
+    _PyDTrace_CALL_RETURN_PROBE(tstate, callable);
+    return res;
 }
 
 
