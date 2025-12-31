@@ -1,0 +1,7 @@
+#!/usr/bin/env -S BPFTRACE_PERF_RB_PAGES=8192 bpftrace
+
+usdt:./python:python:call__entry
+{
+    @cnt[str(arg1), str(arg0), str(arg2)] = count();
+}
+

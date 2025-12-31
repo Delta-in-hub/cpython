@@ -1,0 +1,19 @@
+#!/usr/bin/env -S BPFTRACE_PERF_RB_PAGES=8192 bpftrace
+
+
+usdt:./python:python:call__entry
+{
+  $fn = str(arg1);
+
+  if ($fn == "DemoRCE.__reduce__" || $fn == "__reduce__" || $fn == "__reduce_ex__") {
+    printf("%d %s reduct at %u \n", pid, comm, nsecs);
+    @reduce_on[pid] = pid;
+    @reduce_fn[pid] = $fn;
+  }
+}
+
+tracepoint:syscalls:sys_enter_execve
+/ @reduce_on[(uint64)curtask->real_parent->pid] /
+{
+  printf("FOUND! %s %s %d %u\n", probe, comm, pid, nsecs);
+}
