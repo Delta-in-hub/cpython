@@ -170,7 +170,8 @@ _PyDTrace_IsWhitelistedName(const char *value)
     switch (len) {
         case 2:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("io")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("os"));
         case 3:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("abc")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_io")) ||
@@ -183,7 +184,8 @@ _PyDTrace_IsWhitelistedName(const char *value)
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sre"));
         case 5:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("types")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_stat"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_stat")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("posix"));
         case 6:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("codecs"));
         case 7:
@@ -202,7 +204,8 @@ _PyDTrace_IsWhitelistedName(const char *value)
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._parser"));
         case 11:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("collections")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("genericpath"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("genericpath")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen os>"));
         case 12:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._compiler")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections"));
@@ -214,7 +217,8 @@ _PyDTrace_IsWhitelistedName(const char *value)
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("encodings.utf_8")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_distutils_hack"));
         case 16:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections_abc"));
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections_abc")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen getpath>"));
         case 17:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib"));
         case 26:
