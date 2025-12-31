@@ -351,10 +351,10 @@ _PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
 }
 
 static inline void
-_PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
+_PyDTrace_FUNCTION_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
 {
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-    if (!PyDTrace_CALL_ENTRY_ENABLED()) {
+    if (!PyDTrace_FUNCTION_ENTRY_ENABLED()) {
         return;
     }
 
@@ -362,11 +362,15 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
     _PyErr_Fetch(tstate, &exc_type, &exc_value, &exc_tb);
 
     _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
+    if (PyFunction_Check(callable)) {
+        _PyErr_Restore(tstate, exc_type, exc_value, exc_tb);
+        return;
+    }
     if (_PyDTrace_IsWhitelistedCall(&data)) {
         _PyErr_Restore(tstate, exc_type, exc_value, exc_tb);
         return;
     }
-    PyDTrace_CALL_ENTRY(data.filename, data.funcname, data.modulename);
+    PyDTrace_FUNCTION_ENTRY(data.filename, data.funcname, data.modulename);
 
     _PyErr_Restore(tstate, exc_type, exc_value, exc_tb);
 #else
@@ -376,10 +380,10 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
 }
 
 static inline void
-_PyDTrace_CALL_RETURN_PROBE(PyThreadState *tstate, PyObject *callable)
+_PyDTrace_FUNCTION_RETURN_PROBE(PyThreadState *tstate, PyObject *callable)
 {
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-    if (!PyDTrace_CALL_RETURN_ENABLED()) {
+    if (!PyDTrace_FUNCTION_RETURN_ENABLED()) {
         return;
     }
 
@@ -387,11 +391,15 @@ _PyDTrace_CALL_RETURN_PROBE(PyThreadState *tstate, PyObject *callable)
     _PyErr_Fetch(tstate, &exc_type, &exc_value, &exc_tb);
 
     _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
+    if (PyFunction_Check(callable)) {
+        _PyErr_Restore(tstate, exc_type, exc_value, exc_tb);
+        return;
+    }
     if (_PyDTrace_IsWhitelistedCall(&data)) {
         _PyErr_Restore(tstate, exc_type, exc_value, exc_tb);
         return;
     }
-    PyDTrace_CALL_RETURN(data.filename, data.funcname, data.modulename);
+    PyDTrace_FUNCTION_RETURN(data.filename, data.funcname, data.modulename);
 
     _PyErr_Restore(tstate, exc_type, exc_value, exc_tb);
 #else
@@ -436,10 +444,10 @@ _PyObject_VectorcallTstate(PyThreadState *tstate, PyObject *callable,
         return _PyObject_MakeTpCall(tstate, callable, args, nargs, kwnames);
     }
 
-    _PyDTrace_CALL_ENTRY_PROBE(tstate, callable);
+    _PyDTrace_FUNCTION_ENTRY_PROBE(tstate, callable);
     res = func(callable, args, nargsf, kwnames);
     res = _Py_CheckFunctionResult(tstate, callable, res, NULL);
-    _PyDTrace_CALL_RETURN_PROBE(tstate, callable);
+    _PyDTrace_FUNCTION_RETURN_PROBE(tstate, callable);
     return res;
 }
 

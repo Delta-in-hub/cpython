@@ -4,7 +4,7 @@
 
 
 
-usdt:./python:python:call__entry
+usdt:./python:python:function__entry
 {
   $fn = str(arg1);
 

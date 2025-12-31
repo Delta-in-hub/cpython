@@ -7871,18 +7871,45 @@ _PyEval_RequestCodeExtraIndex(freefunc free)
 }
 
 static void
+static const char *
+dtrace_function_modulename(PyThreadState *tstate, _PyInterpreterFrame *frame)
+{
+    PyObject *globals = frame->f_globals;
+    if (globals != NULL && PyDict_CheckExact(globals)) {
+        PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
+        if (modname != NULL) {
+            const char *name = PyUnicode_AsUTF8(modname);
+            if (name != NULL) {
+                return name;
+            }
+            _PyErr_Clear(tstate);
+        }
+        else if (_PyErr_Occurred(tstate)) {
+            _PyErr_Clear(tstate);
+        }
+    }
+
+    return "?";
+}
+
+static void
 dtrace_function_entry(_PyInterpreterFrame *frame)
 {
     const char *filename;
     const char *funcname;
-    int lineno;
+    const char *modulename;
 
     PyCodeObject *code = frame->f_code;
     filename = PyUnicode_AsUTF8(code->co_filename);
     funcname = PyUnicode_AsUTF8(code->co_name);
-    lineno = _PyInterpreterFrame_GetLine(frame);
-
-    PyDTrace_FUNCTION_ENTRY(filename, funcname, lineno);
+    PyThreadState *tstate = _PyThreadState_GET();
+    modulename = dtrace_function_modulename(tstate, frame);
+    if (_PyDTrace_IsWhitelistedName(modulename) ||
+        _PyDTrace_IsWhitelistedName(filename))
+    {
+        return;
+    }
+    PyDTrace_FUNCTION_ENTRY(filename, funcname, modulename);
 }
 
 static void
@@ -7890,14 +7917,19 @@ dtrace_function_return(_PyInterpreterFrame *frame)
 {
     const char *filename;
     const char *funcname;
-    int lineno;
+    const char *modulename;
 
     PyCodeObject *code = frame->f_code;
     filename = PyUnicode_AsUTF8(code->co_filename);
     funcname = PyUnicode_AsUTF8(code->co_name);
-    lineno = _PyInterpreterFrame_GetLine(frame);
-
-    PyDTrace_FUNCTION_RETURN(filename, funcname, lineno);
+    PyThreadState *tstate = _PyThreadState_GET();
+    modulename = dtrace_function_modulename(tstate, frame);
+    if (_PyDTrace_IsWhitelistedName(modulename) ||
+        _PyDTrace_IsWhitelistedName(filename))
+    {
+        return;
+    }
+    PyDTrace_FUNCTION_RETURN(filename, funcname, modulename);
 }
 
 /* DTrace equivalent of maybe_call_line_trace. */
