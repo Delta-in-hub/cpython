@@ -7870,7 +7870,6 @@ _PyEval_RequestCodeExtraIndex(freefunc free)
     return new_index;
 }
 
-static void
 static const char *
 dtrace_function_modulename(PyThreadState *tstate, _PyInterpreterFrame *frame)
 {
