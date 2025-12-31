@@ -1,5 +1,8 @@
 #!/usr/bin/env -S BPFTRACE_PERF_RB_PAGES=8192 bpftrace
 
+#include <linux/sched.h>
+
+
 
 usdt:./python:python:call__entry
 {
