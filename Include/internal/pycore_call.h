@@ -17,7 +17,9 @@ extern "C" {
 #include "pycore_unicodeobject.h" // _PyUnicode_Ready()
 #include "methodobject.h"         // PyCFunctionObject
 #include "descrobject.h"          // PyMethodDescr_Check
-#include "pydtrace.h"             // PyDTrace_CALL_ENTRY*
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+#  include "pydtrace.h"             // PyDTrace_CALL_ENTRY*
+#endif
 
 #ifndef PyMethodDescr_Check
 #  define PyMethodDescr_Check(op) Py_IS_TYPE((op), &PyMethodDescr_Type)
@@ -150,6 +152,7 @@ typedef struct {
 static inline _PyDTraceCallMetadata
 _PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
 {
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
     _PyDTraceCallMetadata data = {"?", "?", "?"};
 
     if (PyFunction_Check(callable)) {
@@ -244,28 +247,44 @@ _PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
     }
 
     return data;
+#else
+    _PyDTraceCallMetadata data = {"?", "?", "?"};
+    (void)tstate;
+    (void)callable;
+    return data;
+#endif
 }
 
 static inline void
 _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
 {
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
     if (!PyDTrace_CALL_ENTRY_ENABLED()) {
         return;
     }
 
     _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
     PyDTrace_CALL_ENTRY(data.filename, data.funcname, data.modulename);
+#else
+    (void)tstate;
+    (void)callable;
+#endif
 }
 
 static inline void
 _PyDTrace_CALL_RETURN_PROBE(PyThreadState *tstate, PyObject *callable)
 {
+#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
     if (!PyDTrace_CALL_RETURN_ENABLED()) {
         return;
     }
 
     _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
     PyDTrace_CALL_RETURN(data.filename, data.funcname, data.modulename);
+#else
+    (void)tstate;
+    (void)callable;
+#endif
 }
 
 
