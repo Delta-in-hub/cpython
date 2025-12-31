@@ -10,7 +10,9 @@ extern "C" {
 
 #include <stdbool.h>
 
+#include "object.h"               // _Py_Identifier
 #include "pycore_frame.h"         // _PyInterpreterFrame
+#include "pycore_object.h"        // _PyObject_LookupAttrId()
 #include "pycore_pystate.h"       // _PyThreadState_GET()
 #include "pycore_global_strings.h" // _Py_ID()
 #include "pycore_pyerrors.h"      // _PyErr_Clear()
@@ -18,6 +20,9 @@ extern "C" {
 #include "methodobject.h"         // PyCFunctionObject
 #include "descrobject.h"          // PyMethodDescr_Check
 #include "pydtrace.h"             // PyDTrace_CALL_ENTRY*
+
+static _Py_Identifier PyId___module__ = {"__module__", -1};
+static _Py_Identifier PyId___name__ = {"__name__", -1};
 
 #ifndef PyMethodDescr_Check
 #  define PyMethodDescr_Check(op) Py_IS_TYPE((op), &PyMethodDescr_Type)
@@ -29,13 +34,15 @@ extern "C" {
 #  define PyDTrace_CALL_ENTRY_ENABLED() (0)
 #endif
 #ifndef PyDTrace_CALL_ENTRY
-#  define PyDTrace_CALL_ENTRY(arg0, arg1, arg2) ((void)0)
+#  define PyDTrace_CALL_ENTRY(arg0, arg1, arg2) \
+        do { (void)(arg0); (void)(arg1); (void)(arg2); } while (0)
 #endif
 #ifndef PyDTrace_CALL_RETURN_ENABLED
 #  define PyDTrace_CALL_RETURN_ENABLED() (0)
 #endif
 #ifndef PyDTrace_CALL_RETURN
-#  define PyDTrace_CALL_RETURN(arg0, arg1, arg2) ((void)0)
+#  define PyDTrace_CALL_RETURN(arg0, arg1, arg2) \
+        do { (void)(arg0); (void)(arg1); (void)(arg2); } while (0)
 #endif
 
 PyAPI_FUNC(PyObject *) _PyObject_Call_Prepend(
@@ -131,23 +138,27 @@ _PyDTrace_ModuleNameFromObject(PyThreadState *tstate, PyObject *module, const ch
         return fallback;
     }
 
-    PyObject *attr = PyObject_GetAttr(module, &_Py_ID(__module__));
+    PyObject *attr = NULL;
+    if (_PyObject_LookupAttrId(module, &PyId___module__, &attr) < 0) {
+        _PyErr_Clear(tstate);
+        return fallback;
+    }
     if (attr != NULL) {
         const char *result = _PyDTrace_UTF8View(tstate, attr, fallback);
         Py_DECREF(attr);
         return result;
     }
 
-    _PyErr_Clear(tstate);
-
-    attr = PyObject_GetAttr(module, &_Py_ID(__name__));
+    if (_PyObject_LookupAttrId(module, &PyId___name__, &attr) < 0) {
+        _PyErr_Clear(tstate);
+        return fallback;
+    }
     if (attr != NULL) {
         const char *result = _PyDTrace_UTF8View(tstate, attr, fallback);
         Py_DECREF(attr);
         return result;
     }
 
-    _PyErr_Clear(tstate);
     return fallback;
 }
 
