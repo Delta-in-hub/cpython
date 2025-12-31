@@ -175,6 +175,8 @@ _PyObject_MakeTpCall(PyThreadState *tstate, PyObject *callable,
     assert(nargs == 0 || args != NULL);
     assert(keywords == NULL || PyTuple_Check(keywords) || PyDict_Check(keywords));
 
+    _PyDTrace_CALL_ENTRY_PROBE(tstate, callable);
+
     /* Slow path: build a temporary tuple for positional arguments and a
      * temporary dictionary for keyword arguments (if any) */
     ternaryfunc call = Py_TYPE(callable)->tp_call;
@@ -221,7 +223,9 @@ _PyObject_MakeTpCall(PyThreadState *tstate, PyObject *callable,
         Py_DECREF(kwdict);
     }
 
-    return _Py_CheckFunctionResult(tstate, callable, result, NULL);
+    result = _Py_CheckFunctionResult(tstate, callable, result, NULL);
+    _PyDTrace_CALL_RETURN_PROBE(tstate, callable);
+    return result;
 }
 
 

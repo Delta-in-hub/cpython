@@ -47,7 +47,9 @@ or::
 
 
 CPython must then be :option:`configured with the --with-dtrace option
-<--with-dtrace>`:
+<--with-dtrace>`.  The configuration step requires the ``dtrace``
+executable to be available on ``PATH`` (or the SystemTap shim on Linux);
+otherwise ``./configure --with-dtrace`` will stop with an error.
 
 .. code-block:: none
 
@@ -130,6 +132,31 @@ tracing hooks used by a SystemTap script.
 Static DTrace probes
 --------------------
 
+Global call probes
+~~~~~~~~~~~~~~~~~~
+
+Two global probes track every callable invocation that reaches the
+interpreter’s shared call sites:
+
+``call__entry(str filename, str funcname, str modulename)``
+    Fired immediately before dispatch.  Metadata is derived from the callee
+    (``__qualname__``/``__name__``, module, filename when available) with a
+    fallback to the current frame for callables that don’t expose their own
+    Python metadata.  The ``modulename`` field may be ``<frozen ...>`` for
+    frozen modules or the type name for C-defined callables.
+
+``call__return(str filename, str funcname, str modulename)``
+    Fired after the callee returns (whether it’s a Python function, C
+    function, method descriptor, or type call) on both the vectorcall fast
+    path and the legacy ``tp_call`` path, using the same metadata source order
+    as ``call__entry``.
+
+Both probes live in the ``python`` provider and cover Python functions that
+push frames as well as C-level callables that never enter the frame
+evaluator.  The existing ``function__entry``/``function__return`` probes are
+still available for frame-level tracing and can be combined with the call
+probes for deeper analysis.
+
 The following example DTrace script can be used to show the call/return
 hierarchy of a Python script, only tracing within the invocation of
 a function called "start". In other words, import-time function
@@ -195,6 +222,51 @@ The output looks like this:
     156641360719640  function-entry: call_stack.py:function_5:18
     156641360732567 function-return: call_stack.py:function_5:21
     156641360747370 function-return:call_stack.py:start:28
+
+
+Extending probe coverage for all calls
+--------------------------------------
+
+The built-in ``python`` provider exposes ``function-entry`` / ``function-return``
+probes that fire when a Python frame begins and ends execution via the
+``DTRACE_FUNCTION_ENTRY`` / ``DTRACE_FUNCTION_EXIT`` hooks in
+``_PyEval_EvalFrameDefault`` (``Python/ceval.c``).【F:Python/ceval.c†L1492-L1537】【F:Python/ceval.c†L1628-L1680】
+
+To observe **every** callable invocation (including C-implemented functions and
+method descriptors) with a **single, global probe**, CPython emits ``python``
+provider ``call-entry`` events carrying the filename, function name, and module
+name, plus a symmetric ``call-return`` probe with the same three-string payload.
+Each probe derives those strings directly from the callee (Python functions, C
+functions, descriptors, and type calls) and only falls back to the current
+frame when the callee lacks metadata, so extension calls like ``_pickle.loads``
+report the callable’s own names while Python frames still fill in gaps. For
+Python functions the probes prefer the qualified name (``__qualname__``) to
+disambiguate methods like ``ClassRoom.__len__`` from other ``__len__``
+definitions in the same file. Conversions are avoided when the Unicode objects
+are already ASCII-ready to limit per-call overhead:
+
+* ``_PyObject_VectorcallTstate()`` is the lone implementation of
+  ``PyObject_Vectorcall``. It is reached from bytecode-driven calls, direct
+  C-API calls, and vectorcall-compatible types. The call-entry probe is emitted
+  just before invoking the resolved ``vectorcallfunc`` and the call-return probe
+  fires immediately after the post-call result validation, so vectorcall-capable
+  objects are covered without per-opcode instrumentation.【F:Include/internal/pycore_call.h†L168-L263】【F:Include/internal/pycore_call.h†L263-L294】
+* ``_PyObject_MakeTpCall()`` is the fallback when a ``vectorcallfunc`` is
+  absent, building temporary argument tuples/dicts before invoking ``tp_call``.
+  Mirroring the same entry and return probes here closes the gap for legacy
+  ``tp_call``-only callables reached from either the interpreter or external C
+  code.【F:Objects/call.c†L163-L227】【F:Objects/call.c†L227-L259】
+
+With probes anchored at these two functions you get a uniform provider view of
+all callable executions without per-opcode or per-type instrumentation, and you
+receive both entry and return edges at the same choke points. If you also want
+bytecode-level provenance (opcode, frame, code offset), you can add optional
+probes around the interpreter call helpers that feed into these global entry
+points, such as the ``CALL`` opcode’s shared path via ``trace_call_function``
+and the profiling-aware ``trace_call_function`` helper itself.【F:Python/ceval.c†L4730-L4773】【F:Python/ceval.c†L7240-L7313】 Pure
+Python functions will continue to fire the existing frame-entry/frame-exit
+probes, so the global call probes cleanly complement the established tracing
+surface.
 
 
 Static SystemTap markers
