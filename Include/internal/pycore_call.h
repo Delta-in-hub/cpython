@@ -9,6 +9,7 @@ extern "C" {
 #endif
 
 #include <stdbool.h>
+#include <string.h>
 
 #include "pycore_frame.h"         // _PyInterpreterFrame
 #include "pycore_pystate.h"       // _PyThreadState_GET()
@@ -149,6 +150,96 @@ typedef struct {
     const char *modulename;
 } _PyDTraceCallMetadata;
 
+static inline bool
+_PyDTrace_StringEquals(const char *value, size_t len,
+                       const char *literal, size_t literal_len)
+{
+    return len == literal_len && memcmp(value, literal, literal_len) == 0;
+}
+
+#define _PyDTRACE_LITERAL(s) s, (sizeof(s) - 1)
+
+static inline bool
+_PyDTrace_IsWhitelistedName(const char *value)
+{
+    if (value == NULL || _PyDTrace_IsUnknown(value)) {
+        return false;
+    }
+
+    size_t len = strlen(value);
+    switch (len) {
+        case 2:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("io")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re"));
+        case 3:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("abc")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("sys"));
+        case 4:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("enum")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("site")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_abc")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_imp")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_io")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sre")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_stat"));
+        case 5:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("types"));
+        case 6:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("codecs"));
+        case 7:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("marshal")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("copyreg")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("reprlib")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("weakref")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_codecs")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_thread"));
+        case 8:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("builtins"));
+        case 9:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("encodings")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("zipimport"));
+        case 11:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("collections")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("genericpath")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._parser"));
+        case 12:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._compiler")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections"));
+        case 13:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._constants"));
+        case 14:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sitebuiltins"));
+        case 15:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("collections.abc")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("encodings.utf_8")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_distutils_hack"));
+        case 17:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections_abc"));
+        case 18:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib"));
+        case 27:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib_external"));
+        default:
+            return false;
+    }
+}
+
+#undef _PyDTRACE_LITERAL
+
+static inline bool
+_PyDTrace_IsWhitelistedCall(const _PyDTraceCallMetadata *data)
+{
+    if (_PyDTrace_IsWhitelistedName(data->modulename)) {
+        return true;
+    }
+
+    if (_PyDTrace_IsWhitelistedName(data->filename)) {
+        return true;
+    }
+
+    return false;
+}
+
 static inline _PyDTraceCallMetadata
 _PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
 {
@@ -264,6 +355,9 @@ _PyDTrace_CALL_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
     }
 
     _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
+    if (_PyDTrace_IsWhitelistedCall(&data)) {
+        return;
+    }
     PyDTrace_CALL_ENTRY(data.filename, data.funcname, data.modulename);
 #else
     (void)tstate;
@@ -280,6 +374,9 @@ _PyDTrace_CALL_RETURN_PROBE(PyThreadState *tstate, PyObject *callable)
     }
 
     _PyDTraceCallMetadata data = _PyDTrace_GetCallMetadata(tstate, callable);
+    if (_PyDTrace_IsWhitelistedCall(&data)) {
+        return;
+    }
     PyDTrace_CALL_RETURN(data.filename, data.funcname, data.modulename);
 #else
     (void)tstate;
