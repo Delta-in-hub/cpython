@@ -98,6 +98,23 @@ _PyDTrace_UTF8View(PyThreadState *tstate, PyObject *unicode, const char *fallbac
 }
 
 static inline const char *
+_PyDTrace_ModuleNameFromGlobals(PyThreadState *tstate, PyObject *globals,
+                               const char *fallback)
+{
+    if (globals != NULL && PyDict_CheckExact(globals)) {
+        PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
+        if (modname != NULL) {
+            return _PyDTrace_UTF8View(tstate, modname, fallback);
+        }
+        if (_PyErr_Occurred(tstate)) {
+            _PyErr_Clear(tstate);
+        }
+    }
+
+    return fallback;
+}
+
+static inline const char *
 _PyDTrace_ModuleNameFromObject(PyThreadState *tstate, PyObject *module, const char *fallback)
 {
     if (module == NULL) {
@@ -255,32 +272,15 @@ _PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
 
     if (PyFunction_Check(callable)) {
         PyFunctionObject *func = (PyFunctionObject *)callable;
-        data.funcname = _PyDTrace_UTF8View(tstate, func->func_qualname, data.funcname);
-
-        /*
         PyCodeObject *code = (PyCodeObject *)func->func_code;
         if (code != NULL) {
             data.filename = _PyDTrace_UTF8View(tstate, code->co_filename, data.filename);
-            PyObject *qualname = func->func_qualname;
-            if (qualname != NULL) {
-                data.funcname = _PyDTrace_UTF8View(tstate, qualname, data.funcname);
-            }
-            else {
-                data.funcname = _PyDTrace_UTF8View(tstate, code->co_name, data.funcname);
-            }
         }
-        */
 
-        PyObject *globals = func->func_globals;
-        if (globals != NULL && PyDict_CheckExact(globals)) {
-            PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
-            if (modname != NULL) {
-                data.modulename = _PyDTrace_UTF8View(tstate, modname, data.modulename);
-            }
-            else if (_PyErr_Occurred(tstate)) {
-                _PyErr_Clear(tstate);
-            }
-        }
+        data.funcname = _PyDTrace_UTF8View(tstate, func->func_qualname, data.funcname);
+        data.modulename = _PyDTrace_ModuleNameFromObject(
+            tstate, func->func_module,
+            _PyDTrace_ModuleNameFromGlobals(tstate, func->func_globals, data.modulename));
     }
     else if (PyCFunction_Check(callable)) {
         PyCFunctionObject *cfunc = (PyCFunctionObject *)callable;
@@ -321,29 +321,18 @@ _PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
             }
 
             if (_PyDTrace_IsUnknown(data.funcname)) {
-                PyObject *func_qualname = NULL;
-                if (frame->f_func != NULL) {
-                    func_qualname = frame->f_func->func_qualname;
-                }
-                if (func_qualname != NULL) {
-                    data.funcname = _PyDTrace_UTF8View(tstate, func_qualname, data.funcname);
-                }
-                else {
-                    data.funcname = _PyDTrace_UTF8View(tstate, frame->f_code->co_name, data.funcname);
-                }
+                PyFunctionObject *func = frame->f_func;
+                PyObject *qualname = func != NULL ? func->func_qualname : NULL;
+                PyObject *name = qualname != NULL ? qualname : frame->f_code->co_name;
+                data.funcname = _PyDTrace_UTF8View(tstate, name, data.funcname);
             }
 
             if (_PyDTrace_IsUnknown(data.modulename)) {
-                PyObject *globals = frame->f_globals;
-                if (globals != NULL && PyDict_CheckExact(globals)) {
-                    PyObject *modname = PyDict_GetItemWithError(globals, &_Py_ID(__name__));
-                    if (modname != NULL) {
-                        data.modulename = _PyDTrace_UTF8View(tstate, modname, data.modulename);
-                    }
-                    else if (_PyErr_Occurred(tstate)) {
-                        _PyErr_Clear(tstate);
-                    }
-                }
+                PyFunctionObject *func = frame->f_func;
+                data.modulename = _PyDTrace_ModuleNameFromObject(
+                    tstate,
+                    func != NULL ? func->func_module : NULL,
+                    _PyDTrace_ModuleNameFromGlobals(tstate, frame->f_globals, data.modulename));
             }
         }
     }
