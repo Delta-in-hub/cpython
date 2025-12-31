@@ -1713,6 +1713,8 @@ start_frame:
         goto exit_unwind;
     }
 
+    DTRACE_FUNCTION_ENTRY();
+
 resume_frame:
     SET_LOCALS_FROM_FRAME();
 
@@ -7898,9 +7900,11 @@ dtrace_function_entry(_PyInterpreterFrame *frame)
     const char *funcname;
     const char *modulename;
 
+    PyFunctionObject *func = frame->f_func;
     PyCodeObject *code = frame->f_code;
     filename = PyUnicode_AsUTF8(code->co_filename);
-    funcname = PyUnicode_AsUTF8(code->co_name);
+    // funcname = PyUnicode_AsUTF8(code->co_name);
+    funcname = PyUnicode_AsUTF8(func->func_qualname);
     PyThreadState *tstate = _PyThreadState_GET();
     modulename = dtrace_function_modulename(tstate, frame);
     if (_PyDTrace_IsWhitelistedName(modulename) ||
@@ -7918,9 +7922,11 @@ dtrace_function_return(_PyInterpreterFrame *frame)
     const char *funcname;
     const char *modulename;
 
+    PyFunctionObject *func = frame->f_func;
     PyCodeObject *code = frame->f_code;
     filename = PyUnicode_AsUTF8(code->co_filename);
-    funcname = PyUnicode_AsUTF8(code->co_name);
+    // funcname = PyUnicode_AsUTF8(code->co_name);
+    funcname = PyUnicode_AsUTF8(func->func_qualname);
     PyThreadState *tstate = _PyThreadState_GET();
     modulename = dtrace_function_modulename(tstate, frame);
     if (_PyDTrace_IsWhitelistedName(modulename) ||

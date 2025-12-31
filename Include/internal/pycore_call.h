@@ -74,7 +74,7 @@ _PyVectorcall_FunctionInline(PyObject *callable)
 static inline const char *
 _PyDTrace_UTF8View(PyThreadState *tstate, PyObject *unicode, const char *fallback)
 {
-    if (!PyUnicode_Check(unicode)) {
+    if (!unicode || !PyUnicode_Check(unicode)) {
         return fallback;
     }
 
@@ -211,6 +211,7 @@ _PyDTrace_IsWhitelistedName(const char *value)
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections"));
         case 13:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._constants")) ||
+                     _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen stat>")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sitebuiltins"));
         case 15:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("collections.abc")) ||
@@ -221,6 +222,8 @@ _PyDTrace_IsWhitelistedName(const char *value)
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen getpath>"));
         case 17:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib"));
+        case 18:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen posixpath>"));
         case 26:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib_external"));
         default:
@@ -252,6 +255,9 @@ _PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
 
     if (PyFunction_Check(callable)) {
         PyFunctionObject *func = (PyFunctionObject *)callable;
+        data.funcname = _PyDTrace_UTF8View(tstate, func->func_qualname, data.funcname);
+
+        /*
         PyCodeObject *code = (PyCodeObject *)func->func_code;
         if (code != NULL) {
             data.filename = _PyDTrace_UTF8View(tstate, code->co_filename, data.filename);
@@ -263,6 +269,7 @@ _PyDTrace_GetCallMetadata(PyThreadState *tstate, PyObject *callable)
                 data.funcname = _PyDTrace_UTF8View(tstate, code->co_name, data.funcname);
             }
         }
+        */
 
         PyObject *globals = func->func_globals;
         if (globals != NULL && PyDict_CheckExact(globals)) {

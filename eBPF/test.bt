@@ -2,6 +2,13 @@
 
 usdt:./python:python:function__entry
 {
-    @cnt[str(arg0), str(arg1), str(arg2)] = count();
+    @ent[str(arg1), str(arg2), str(arg0)] = count();
 }
+
+
+usdt:./python:python:function__return
+{
+    @ret[str(arg1), str(arg2), str(arg0)] = count();
+}
+
 
