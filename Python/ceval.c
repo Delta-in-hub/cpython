@@ -7896,17 +7896,16 @@ dtrace_function_modulename(PyThreadState *tstate, _PyInterpreterFrame *frame)
 static void
 dtrace_function_entry(_PyInterpreterFrame *frame)
 {
-    const char *filename;
-    const char *funcname;
-    const char *modulename;
-
     PyFunctionObject *func = frame->f_func;
     PyCodeObject *code = frame->f_code;
-    filename = PyUnicode_AsUTF8(code->co_filename);
-    // funcname = PyUnicode_AsUTF8(code->co_name);
-    funcname = PyUnicode_AsUTF8(func->func_qualname);
     PyThreadState *tstate = _PyThreadState_GET();
-    modulename = dtrace_function_modulename(tstate, frame);
+
+    const char *filename = _PyDTrace_UTF8View(tstate, code->co_filename, "?");
+    const char *funcname = _PyDTrace_UTF8View(tstate, func->func_qualname, "?");
+    const char *modulename = _PyDTrace_ModuleNameFromObject(
+        tstate,
+        func->func_module,
+        dtrace_function_modulename(tstate, frame));
     if (_PyDTrace_IsWhitelistedName(modulename) ||
         _PyDTrace_IsWhitelistedName(filename))
     {
@@ -7918,17 +7917,16 @@ dtrace_function_entry(_PyInterpreterFrame *frame)
 static void
 dtrace_function_return(_PyInterpreterFrame *frame)
 {
-    const char *filename;
-    const char *funcname;
-    const char *modulename;
-
     PyFunctionObject *func = frame->f_func;
     PyCodeObject *code = frame->f_code;
-    filename = PyUnicode_AsUTF8(code->co_filename);
-    // funcname = PyUnicode_AsUTF8(code->co_name);
-    funcname = PyUnicode_AsUTF8(func->func_qualname);
     PyThreadState *tstate = _PyThreadState_GET();
-    modulename = dtrace_function_modulename(tstate, frame);
+
+    const char *filename = _PyDTrace_UTF8View(tstate, code->co_filename, "?");
+    const char *funcname = _PyDTrace_UTF8View(tstate, func->func_qualname, "?");
+    const char *modulename = _PyDTrace_ModuleNameFromObject(
+        tstate,
+        func->func_module,
+        dtrace_function_modulename(tstate, frame));
     if (_PyDTrace_IsWhitelistedName(modulename) ||
         _PyDTrace_IsWhitelistedName(filename))
     {
