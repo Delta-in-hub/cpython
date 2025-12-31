@@ -368,6 +368,30 @@ Available static markers
 
    The arguments are the same as for :c:func:`!function__entry`
 
+.. object:: call__entry(str filename, str funcname, str modulename)
+
+   This marker fires immediately before a callable is dispatched at the
+   interpreter's shared call sites.  It covers all callables that reach these
+   choke points, including Python functions, C functions, method descriptors,
+   and type calls.  For Python functions it prefers the qualified name
+   (``__qualname__``) to disambiguate methods.
+
+   The filename, function name, and module name are provided back to the
+   tracing script as positional arguments, which must be accessed using
+   ``$arg1``, ``$arg2``, ``$arg3``:
+
+       * ``$arg1`` : ``(const char *)`` filename, accessible using ``user_string($arg1)``
+
+       * ``$arg2`` : ``(const char *)`` function name (or qualified name), accessible using
+         ``user_string($arg2)``
+
+       * ``$arg3`` : ``(const char *)`` module name, accessible using ``user_string($arg3)``
+
+.. object:: call__return(str filename, str funcname, str modulename)
+
+   This marker fires after the callable returns (whether successfully or via an
+   exception).  The arguments are the same as for :c:func:`!call__entry`.
+
 .. object:: line(str filename, str funcname, int lineno)
 
    This marker indicates a Python line is about to be executed.  It is
