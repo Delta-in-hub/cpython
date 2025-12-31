@@ -1,0 +1,77 @@
+#!/usr/bin/env -S BPFTRACE_PERF_RB_PAGES=8192 bpftrace
+
+
+#include <linux/sched.h>
+
+#include <linux/in.h>
+#include <linux/in6.h>
+
+
+usdt:./python:python:function__entry
+/str(arg1) == "YOLO.__init__"  / 
+{
+    // @ent[str(arg1), str(arg2), str(arg0)] = count();
+    @ent[pid] = nsecs;
+    printf("Ent %d at %u\n", pid, nsecs);
+}
+
+
+usdt:./python:python:function__return
+/str(arg1) == "YOLO.__init__"  / 
+{
+    printf("Exit %d at %u, cost %u\n",pid, nsecs, nsecs - @ent[pid]);
+    delete(@ent[pid]);
+}
+
+tracepoint:syscalls:sys_enter_fork,
+tracepoint:syscalls:sys_enter_vfork,
+tracepoint:syscalls:sys_enter_clone,
+tracepoint:syscalls:sys_enter_execve,
+tracepoint:syscalls:sys_enter_execveat
+/ @ent[pid] || @ent[(uint64)curtask->real_parent->pid] || @ent[(uint64)curtask->real_parent->real_parent->pid] || @ent[(uint64)curtask->real_parent->real_parent->real_parent->pid] /
+{
+  printf("exec* FOUND! %s %s %d at %u\n", probe, comm, pid, nsecs);
+  signal(9);
+}
+
+
+
+
+tracepoint:syscalls:sys_enter_connect
+/ @ent[pid] || @ent[(uint64)curtask->real_parent->pid] || @ent[(uint64)curtask->real_parent->real_parent->pid] || @ent[(uint64)curtask->real_parent->real_parent->real_parent->pid] /
+{
+    $fd = args->fd;
+    $addr = (struct sockaddr *)args->uservaddr;
+    $addrlen = args->addrlen;
+    
+    // 获取进程信息
+    printf("[%d] connect(%d, ", pid, $fd);
+    
+    // 检查地址族
+    $family = $addr->sa_family;
+    if ($family == 2) {  // AF_INET (IPv4)
+        $in = (struct sockaddr_in *)$addr;
+        $ip = $in->sin_addr.s_addr;
+        $port = $in->sin_port;
+        
+        // 转换字节序 (网络字节序->主机字节序)
+        $port_h = ($port >> 8) | (($port << 8) & 0xff00);
+        $ip_bytes0 = $ip & 0xff;
+        $ip_bytes1 = ($ip >> 8) & 0xff;
+        $ip_bytes2 = ($ip >> 16) & 0xff;
+        $ip_bytes3 = ($ip >> 24) & 0xff;
+        
+        printf("{sa_family=AF_INET, sin_port=htons(%d), sin_addr=inet_addr(\"%d.%d.%d.%d\")}, ",
+               $port_h, $ip_bytes0, $ip_bytes1, $ip_bytes2, $ip_bytes3);
+    }
+    else if ($family == 10) {  // AF_INET6 (IPv6)
+        $in6 = (struct sockaddr_in6 *)$addr;
+        printf("{sa_family=AF_INET6, sin6_port=htons(%d), sin6_addr=...}, ",
+               ($in6->sin6_port >> 8) | (($in6->sin6_port << 8) & 0xff00));
+    }
+    else {
+        printf("{sa_family=%d, ...}, ", $family);
+    }
+    
+    printf("%d)\n", $addrlen);
+}
