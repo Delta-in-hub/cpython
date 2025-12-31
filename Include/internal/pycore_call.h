@@ -173,17 +173,17 @@ _PyDTrace_IsWhitelistedName(const char *value)
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re"));
         case 3:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("abc")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_io")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("sys"));
         case 4:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("enum")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("site")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_abc")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_imp")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_io")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sre")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_stat"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sre"));
         case 5:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("types"));
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("types")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_stat"));
         case 6:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("codecs"));
         case 7:
@@ -198,26 +198,26 @@ _PyDTrace_IsWhitelistedName(const char *value)
         case 9:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("encodings")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("zipimport"));
+        case 10:
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._parser"));
         case 11:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("collections")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("genericpath")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._parser"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("genericpath"));
         case 12:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._compiler")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections"));
         case 13:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._constants"));
-        case 14:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sitebuiltins"));
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._constants")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sitebuiltins"));
         case 15:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("collections.abc")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("encodings.utf_8")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_distutils_hack"));
-        case 17:
+        case 16:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections_abc"));
-        case 18:
+        case 17:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib"));
-        case 27:
+        case 26:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib_external"));
         default:
             return false;
