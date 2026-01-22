@@ -1,4 +1,4 @@
-#!/usr/bin/env -S BPFTRACE_PERF_RB_PAGES=8192 bpftrace
+#!/usr/bin/env -S BPFTRACE_PERF_RB_PAGES=8192 bpftrace --unsafe
 
 
 #include <linux/sched.h>
@@ -6,17 +6,17 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 
-
-usdt:./python:python:function__entry
+usdt:./libpython3.11.so.1.0:python:function__entry
+// usdt:./python:python:function__entry
 /str(arg1) == "YOLO.__init__"  / 
 {
     // @ent[str(arg1), str(arg2), str(arg0)] = count();
     @ent[pid] = nsecs;
-    printf("Ent %d at %u\n", pid, nsecs);
+    printf("Enter %d at %u\n", pid, nsecs);
 }
 
-
-usdt:./python:python:function__return
+usdt:./libpython3.11.so.1.0:python:function__return
+// usdt:./python:python:function__return
 /str(arg1) == "YOLO.__init__"  / 
 {
     printf("Exit %d at %u, cost %u\n",pid, nsecs, nsecs - @ent[pid]);
