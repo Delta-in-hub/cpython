@@ -184,6 +184,22 @@ _PyDTrace_IsWhitelistedName(const char *value)
     }
 
     size_t len = strlen(value);
+
+    if ((len >= 4 && strncmp(value, "pip.", 4) == 0) ||
+        (len >= 5 && strncmp(value, "json.", 5) == 0) ||
+        (len >= 6 && strncmp(value, "email.", 6) == 0) ||
+        (len >= 7 && strncmp(value, "urllib.", 7) == 0) ||
+        (len >= 8 && strncmp(value, "logging.", 8) == 0) ||
+        (len >= 10 && strncmp(value, "distutils.", 10) == 0) ||
+        (len >= 10 && strncmp(value, "encodings.", 10) == 0) ||
+        (len >= 10 && strncmp(value, "importlib.", 10) == 0) ||
+        (len >= 10 && strncmp(value, "packaging.", 10) == 0) ||
+        (len >= 11 && strncmp(value, "namedtuple_", 11) == 0) ||
+        (len >= 11 && strncmp(value, "concurrent.", 11) == 0) ||
+        (len >= 15 && strncmp(value, "more_itertools.", 15) == 0)) {
+        return true;
+    }
+
     switch (len) {
         case 2:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("io")) ||
@@ -192,40 +208,104 @@ _PyDTrace_IsWhitelistedName(const char *value)
         case 3:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("abc")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_io")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("sys"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("sys")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("ast")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("ssl"));
         case 4:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("enum")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("site")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_abc")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_imp")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sre"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_sre")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("hmac")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("glob")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("copy")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("time")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("zlib")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("http")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("json")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("math")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("uuid")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("gzip"));
         case 5:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("types")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_stat")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("posix"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("posix")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("shlex")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("email")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("token")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("queue"));
         case 6:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("codecs"));
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("codecs")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("typing")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("opcode")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("random")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("socket")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("shutil")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("signal")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("locale")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("string"));
         case 7:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("marshal")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("copyreg")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("reprlib")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("weakref")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_codecs")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_thread"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_thread")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("logging")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("inspect")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("pathlib")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("zipfile")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_struct")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("fnmatch")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("hashlib")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("pkgutil")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("tarfile")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("keyword")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("filecmp")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("gettext"));
         case 8:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("builtins"));
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("builtins")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("datetime")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("calendar")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("tokenize")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("warnings")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("optparse")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("platform")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("tempfile")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("argparse")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("operator")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("textwrap")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_hashlib"));
         case 9:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("encodings")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("zipimport"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("zipimport")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("ipaddress")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("traceback")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("itertools")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_operator")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("sysconfig")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("functools")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("threading")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("selectors")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_warnings"));
         case 10:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._parser"));
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._parser")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("contextlib")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("py_compile")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("compileall")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("subprocess")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("__future__"));
         case 11:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("collections")) ||
                    _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("genericpath")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen os>"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen os>")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("dataclasses")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_weakrefset"));
         case 12:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._compiler")) ||
-                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections"));
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_collections")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("configparser"));
         case 13:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("re._constants")) ||
                      _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen stat>")) ||
@@ -240,9 +320,11 @@ _PyDTrace_IsWhitelistedName(const char *value)
         case 17:
             return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib"));
         case 18:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen posixpath>"));
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("<frozen posixpath>")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("namedtuple__Version"));
         case 26:
-            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib_external"));
+            return _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("_frozen_importlib_external")) ||
+                   _PyDTrace_StringEquals(value, len, _PyDTRACE_LITERAL("pip._vendor.pyparsing.core"));
         default:
             return false;
     }
@@ -368,6 +450,10 @@ _PyDTrace_FUNCTION_ENTRY_PROBE(PyThreadState *tstate, PyObject *callable)
     }
     PyDTrace_FUNCTION_ENTRY(data.filename, data.funcname, data.modulename);
 
+    // Clear any new exceptions raised during metadata collection before restoring
+    if (_PyErr_Occurred(tstate)) {
+        _PyErr_Clear(tstate);
+    }
     _PyErr_Restore(tstate, exc_type, exc_value, exc_tb);
 #else
     (void)tstate;
@@ -397,6 +483,10 @@ _PyDTrace_FUNCTION_RETURN_PROBE(PyThreadState *tstate, PyObject *callable)
     }
     PyDTrace_FUNCTION_RETURN(data.filename, data.funcname, data.modulename);
 
+    // Clear any new exceptions raised during metadata collection before restoring
+    if (_PyErr_Occurred(tstate)) {
+        _PyErr_Clear(tstate);
+    }
     _PyErr_Restore(tstate, exc_type, exc_value, exc_tb);
 #else
     (void)tstate;

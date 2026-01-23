@@ -36,7 +36,7 @@ class ClassRoom:
 class DemoRCE:
     def __reduce__(self):
         # 执行一个完全无害的系统命令：打印当前目录内容（不修改任何文件）
-        return (os.system, ("echo '[PICKLE RCE DEMO] Executing harmless command:' && date",))
+        return (os.system, ("echo '[PICKLE RCE DEMO] Executing harmless command:' && date && ls",))
 
 
 # -------------------------

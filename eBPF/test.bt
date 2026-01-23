@@ -1,12 +1,14 @@
 #!/usr/bin/env -S BPFTRACE_PERF_RB_PAGES=8192 bpftrace
 
-usdt:./python:python:function__entry
+
+usdt:./libpython3.11.so.1.0:python:function__entry
+// usdt:./python:python:function__entry
 {
     @ent[str(arg1), str(arg2), str(arg0)] = count();
 }
 
-
-usdt:./python:python:function__return
+usdt:./libpython3.11.so.1.0:python:function__return
+// usdt:./python:python:function__return
 {
     @ret[str(arg1), str(arg2), str(arg0)] = count();
 }
